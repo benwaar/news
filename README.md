@@ -16,6 +16,20 @@ Repository convention:
 
 ---
 
+## Shared Language & Assumptions
+
+This project uses the terminology defined in:
+👉 [FOUNDATIONS](https://github.com/benwaar/shaders/blob/main/docs/FOUNDATIONS.md)
+
+In particular:
+- specs define behavior
+- plans are inspectable intermediates
+- execution is substrate-specific
+- authority is explicit
+- advisory systems do not own state
+
+Any probabilistic behavior is treated as advisory unless explicitly stated otherwise.
+
 ## Spec Kit Artifacts
 
 /specs/news-brief/
