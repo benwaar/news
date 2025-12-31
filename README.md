@@ -16,6 +16,59 @@ Repository convention:
 
 ---
 
+## KERNEL-Inspired “Vibe Coding” (Fluency Mode)
+
+This project is being created in “Python Fluency Mode”. The goal is learning the language, not enforcing specs.
+Refactors are allowed. Mistakes are expected.
+
+This project uses a **KERNEL-inspired approach** while coding interactively via chat.
+
+The goal is **language fluency and understanding**, not formal specification or locked behavior.
+
+### What “vibe coding” means here
+- Build **one small, runnable step at a time**
+- Use the chat window to propose the next step
+- Run the code immediately
+- Debug from real errors and outputs
+- Refactor freely as understanding improves
+
+This is *interactive co-building*, not copy-pasting large solutions.
+
+### KERNEL principles retained (lightweight)
+
+Even in fluency mode, a few constraints are intentionally kept:
+
+#### 1. Small, inspectable steps
+- Each change should be runnable within minutes
+- No large, untested jumps
+- Prefer visible state (prints, logs, simple outputs)
+
+#### 2. Explicit authority
+- The program owns its state (files, SQLite)
+- Chat suggestions are advisory, not authoritative
+- The code on disk is the source of truth
+
+#### 3. Clear ownership boundaries
+- Separate concerns early (db / ingest / brief)
+- Avoid “god files” even while experimenting
+
+#### 4. Fast feedback over correctness
+- Errors are learning signals, not failures
+- Fix what breaks *now*, not what might break later
+
+---
+
+### What is intentionally **not** enforced
+- No formal specs or acceptance gates
+- No locked behavior
+- No premature optimization
+- No obligation to keep early design decisions
+
+This is **fluency mode**, not contract mode.
+
+
+---
+
 ## Shared Language & Assumptions
 
 This project uses the terminology defined in:
