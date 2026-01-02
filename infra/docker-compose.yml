@@ -1,0 +1,74 @@
+services:
+  keycloak:
+    container_name: infra-keycloak-dev
+    build: ./keycloak
+    command: start-dev --import-realm --https-port=8443
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_PROXY: edge
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/localhost.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/localhost-key.pem
+    ports:
+      - "8081:8080"
+      - "8443:8443"
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+
+  db:
+    container_name: infra-db-dev
+    build: ./postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: news
+    ports:
+      - "55432:5432"  # Host port changed to avoid conflict with local Postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d news"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+
+  api:
+    container_name: infra-api-dev
+    build: ../services/api
+    environment:
+      PORT: 9000
+    ports:
+      - "9000:9000"
+    depends_on:
+      - db
+      - keycloak
+    restart: unless-stopped
+
+  rss-mcp:
+    container_name: infra-rss-mcp-dev
+    build: ../services/rss-mcp
+    environment:
+      PORT: 9002
+    ports:
+      - "9002:9002"
+    restart: unless-stopped
+
+  ui:
+    container_name: infra-ui-dev
+    build: ../services/ui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../services/ui/certs:/etc/nginx/certs:ro
+    depends_on:
+      - keycloak
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

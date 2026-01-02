@@ -1,0 +1,20 @@
+# Ignore UI dependencies
+services/ui/node_modules/
+
+# Ignore UI build artifacts
+services/ui/dist/
+services/ui/.angular/
+services/ui/.cache/
+services/ui/certs/
+infra/keycloak/certs/
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# Logs and env files
+*.log
+.env*
+

@@ -1,0 +1,79 @@
+{
+  "realm": "news",
+  "enabled": true,
+  "displayName": "News",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      {"name": "player", "description": "Standard player role"},
+      {"name": "dealer", "description": "Dealer/admin gameplay role"}
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "news-angular",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": ["https://localhost/*"],
+      "webOrigins": ["https://localhost"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "spinner-web",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:4200/*", "https://localhost/*"],
+      "webOrigins": ["http://localhost:4200", "https://localhost"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-news-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "news-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "news-api",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "CHANGE_ME_IN_PROD",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ],
+  "users": [
+    {
+      "username": "test",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "test@example.com",
+      "firstName": "Test",
+      "lastName": "User",
+      "credentials": [
+        {"type": "password", "value": "test", "temporary": false}
+      ],
+      "realmRoles": ["player"]
+    }
+  ]
+}

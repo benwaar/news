@@ -239,3 +239,53 @@ This project deliberately builds “agent capability” in layers:
 5) optional LLM synthesis
 
 At every stage, the system remains usable and testable.
+
+---
+
+## Local Git Hooks
+
+Enable repository hooks to guard against committing sensitive files and large artifacts:
+
+- Enable hooks: `tools/enable-githooks.sh`
+- Confirm path: `git config --get core.hooksPath` (should be `.githooks`)
+
+The pre-commit hook blocks staged files matching `*.pem`, `*.key`, `*.crt`, `*.env*`, files larger than 5MB, and runs quick lint checks:
+
+- JS services: syntax check (`node --check`) on staged files in [services/api/src](services/api/src) and [services/rss-mcp/src](services/rss-mcp/src).
+- Angular UI: TypeScript typecheck (`tsc --noEmit`) using the UI’s local compiler.
+
+Skip temporarily with `--no-verify` if needed.
+
+---
+
+## Production Hardening (Notes)
+
+This repository is optimized for local experimentation. For production, consider:
+
+- **ESLint/Formatting:** Add ESLint/Prettier for `services/api`, `services/rss-mcp`, and Angular UI; enforce in CI.
+- **CORS/Rate Limits:** Restrict CORS to known origins and add basic rate limiting to public endpoints.
+- **Container Hardening:** Run as non-root (done), pin images (done), and for k8s set `readOnlyRootFilesystem`, drop capabilities, and add resource requests/limits.
+- **Secrets Management:** Use environment injection (not bake-in) and a secrets manager; keep `.env*` and certs out of VCS (enforced).
+- **TLS:** Replace mkcert with trusted certificates in production; configure HSTS carefully.
+- **DB Migrations:** Introduce a migration tool and process; the `schema_migrations` table is present for future use.
+
+## Local TLS Certs
+
+- Purpose: local HTTPS for UI and Keycloak. Certs are generated locally and not committed.
+- Paths (ignored by git): [services/ui/certs](services/ui/certs), [infra/keycloak/certs](infra/keycloak/certs)
+- Quick setup (macOS):
+
+```bash
+brew install mkcert
+mkcert -install
+
+# Keycloak (HTTPS on 8443)
+mkcert -cert-file infra/keycloak/certs/localhost.pem -key-file infra/keycloak/certs/localhost-key.pem localhost
+
+# UI (HTTPS on 443)
+mkcert -cert-file services/ui/certs/localhost.pem -key-file services/ui/certs/localhost-key.pem localhost
+```
+
+- Or run: `tools/bootstrap.sh` (builds services and provisions certs if needed)
+
+Compose mounts these certs automatically for [infra/keycloak](infra/keycloak) and [services/ui](services/ui) containers.
