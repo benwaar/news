@@ -100,6 +100,7 @@ Definition of authority:
 ## Phase 0 — Spec Baseline (core)
 
 Deliverables:
+- [setup-notes.md](docs/setup-notes.md): setup a fresh local environment
 - spec.md: definitions of “new”, “duplicate”, “novel”, output format, non-goals
 - plan.md: components + boundaries (FastAPI server, storage, MCP client, embeddings)
 - tasks.md: first implementation sequence
