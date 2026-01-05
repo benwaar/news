@@ -1,0 +1,12 @@
+/* News theme overrides */
+:root { --accent: #2255ee; }
+#kc-login.pf-c-button.pf-m-primary,
+.btn.btn-primary#kc-login {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+#kc-login.pf-c-button.pf-m-primary:hover,
+.btn.btn-primary#kc-login:hover {
+  filter: brightness(1.1);
+}

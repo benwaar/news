@@ -1,11 +1,18 @@
-# Ignore UI dependencies
-services/ui/node_modules/
+# Ignore build dependencies
+services/ui-news/node_modules/
+services/ui-portal/node_modules/
+services/api/node_modules/
+services/rss-mcp/node_modules/
 
 # Ignore UI build artifacts
-services/ui/dist/
-services/ui/.angular/
-services/ui/.cache/
-services/ui/certs/
+services/ui-news/dist/
+services/ui-news/.angular/
+services/ui-news/.cache/
+services/ui-news/certs/
+services/ui-portal/dist/
+services/ui-portal/.angular/
+services/ui-portal/.cache/
+services/ui-portal/certs/
 infra/keycloak/certs/
 
 # OS/editor files

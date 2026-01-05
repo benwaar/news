@@ -7,6 +7,8 @@ FROM quay.io/keycloak/keycloak:25.0.0
 COPY themes/ /opt/keycloak/themes/
 
 # Copy realm for auto-import (Keycloak reads from /opt/keycloak/data/import when --import-realm is used)
+# Import multiple realms for experimentation
 COPY realm-news.json /opt/keycloak/data/import/realm-news.json
+COPY realm-portal.json /opt/keycloak/data/import/realm-portal.json
 
 # Runtime command provided via docker-compose (start-dev --import-realm)

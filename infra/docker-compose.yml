@@ -58,16 +58,32 @@ services:
       - "9002:9002"
     restart: unless-stopped
 
-  ui:
-    container_name: infra-ui-dev
-    build: ../services/ui
+  ui-news:
+    container_name: infra-ui-news-dev
+    build: ../services/ui-news
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ../services/ui/certs:/etc/nginx/certs:ro
+      - ../services/ui-news/certs:/etc/nginx/certs:ro
     depends_on:
       - keycloak
+      - api
+      - rss-mcp
+    restart: unless-stopped
+
+  ui-portal:
+    container_name: infra-ui-portal-dev
+    build: ../services/ui-portal
+    ports:
+      - "8080:80"
+      - "4443:443"
+    volumes:
+      - ../services/ui-portal/certs:/etc/nginx/certs:ro
+    depends_on:
+      - keycloak
+      - api
+      - rss-mcp
     restart: unless-stopped
 
 volumes:

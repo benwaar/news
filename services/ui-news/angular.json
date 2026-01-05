@@ -16,7 +16,7 @@
             "main": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "polyfills": [],
-            "assets": [],
+            "assets": ["src/favicon.svg"],
             "styles": ["src/styles.css"],
             "scripts": []
           },

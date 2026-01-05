@@ -1,44 +1,34 @@
 {
-  "realm": "news",
+  "realm": "portal",
   "enabled": true,
-  "displayName": "News",
-  "loginTheme": "news",
+  "displayName": "Portal",
+  "loginTheme": "portal",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": true,
-  
+  "roles": {
+    "realm": [
+      {"name": "viewer", "description": "Standard viewer role"},
+      {"name": "admin", "description": "Administrative role"}
+    ]
+  },
   "clients": [
-    
     {
-      "clientId": "news-web",
+      "clientId": "portal-web",
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "redirectUris": ["https://localhost/*"],
-      "webOrigins": ["https://localhost"],
+      "redirectUris": ["https://localhost/*", "https://localhost:4443/*", "http://localhost:4200/*"],
+      "webOrigins": ["https://localhost", "https://localhost:4443", "http://localhost:4200"],
       "attributes": {
         "pkce.code.challenge.method": "S256"
-      },
-      "protocolMappers": [
-        {
-          "name": "audience-news-api",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "news-api",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
+      }
     },
     {
-      "clientId": "news-api",
+      "clientId": "portal-api",
       "protocol": "openid-connect",
       "publicClient": false,
       "secret": "CHANGE_ME_IN_PROD",
@@ -51,15 +41,16 @@
   ],
   "users": [
     {
-      "username": "news",
+      "username": "portal",
       "enabled": true,
       "emailVerified": true,
-      "email": "news@example.com",
-      "firstName": "News",
+      "email": "portal@example.com",
+      "firstName": "Portal",
       "lastName": "User",
       "credentials": [
-        {"type": "password", "value": "news", "temporary": false}
-      ]
+        {"type": "password", "value": "portal", "temporary": false}
+      ],
+      "realmRoles": ["viewer"]
     }
   ]
 }

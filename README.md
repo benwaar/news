@@ -14,7 +14,6 @@ Repository convention:
 - /news/ contains the application
 - /specs/news-brief/ contains the specs (Spec Kit style)
 
----
 
 ## KERNEL-Inspired “Vibe Coding” (Fluency Mode)
 
@@ -56,7 +55,6 @@ Even in fluency mode, a few constraints are intentionally kept:
 - Errors are learning signals, not failures
 - Fix what breaks *now*, not what might break later
 
----
 
 ### What is intentionally **not** enforced
 - No formal specs or acceptance gates
@@ -67,7 +65,6 @@ Even in fluency mode, a few constraints are intentionally kept:
 This is **fluency mode**, not contract mode.
 
 
----
 
 ## Shared Language & Assumptions
 
@@ -95,7 +92,6 @@ Definition of authority:
 - MCP tools are capabilities only (fetch/parse/scan), not stateful owners
 - LLM outputs are advisory and never authoritative
 
----
 
 ## Phase 0 — Spec Baseline (core)
 
@@ -109,7 +105,6 @@ Acceptance:
 - Specs exist and are readable
 - A change to behavior requires a spec change
 
----
 
 ## Phase 1 — Deterministic Core (core)
 
@@ -130,7 +125,6 @@ Acceptance:
 - Brief output is deterministic from DB contents
 - Works offline after ingest (reading DB only)
 
----
 
 ## Phase 2 — MCP Integration (core learning)
 
@@ -148,7 +142,6 @@ Acceptance:
 - MCP server can be swapped without changing storage logic
 - Logs show tool calls and failures clearly
 
----
 
 ## Phase 3 — Embeddings “Memory” (core learning)
 
@@ -171,7 +164,6 @@ Acceptance:
 - System works fully offline
 - Results are reproducible given same model + data
 
----
 
 ## Phase 4 — Agent Loop (no LLM required) (core learning)
 
@@ -191,7 +183,6 @@ Acceptance:
 - One command produces the daily brief end-to-end
 - Logs explain decisions (why items were selected/skipped)
 
----
 
 ## Phase 5 — Optional LLM Synthesis Layer (optional)
 
@@ -213,7 +204,6 @@ Acceptance:
 - AI output is clearly marked as advisory
 - Cost controls exist if using a cloud key (top-N only)
 
----
 
 ## Phase 6 — Quality + Security Extensions (optional)
 
@@ -227,7 +217,6 @@ Acceptance:
 - Extensions don’t break determinism of the core pipeline
 - Failures degrade gracefully (best-effort enrichment)
 
----
 
 ## Summary
 
@@ -241,7 +230,6 @@ This project deliberately builds “agent capability” in layers:
 
 At every stage, the system remains usable and testable.
 
----
 
 ## Local Git Hooks
 
@@ -257,7 +245,6 @@ The pre-commit hook blocks staged files matching `*.pem`, `*.key`, `*.crt`, `*.e
 
 Skip temporarily with `--no-verify` if needed.
 
----
 
 ## Production Hardening (Notes)
 
@@ -273,7 +260,7 @@ This repository is optimized for local experimentation. For production, consider
 ## Local TLS Certs
 
 - Purpose: local HTTPS for UI and Keycloak. Certs are generated locally and not committed.
-- Paths (ignored by git): [services/ui/certs](services/ui/certs), [infra/keycloak/certs](infra/keycloak/certs)
+- Paths (ignored by git): [services/ui-news/certs](services/ui-news/certs), [services/ui-portal/certs](services/ui-portal/certs), [infra/keycloak/certs](infra/keycloak/certs)
 - Quick setup (macOS):
 
 ```bash
@@ -284,9 +271,45 @@ mkcert -install
 mkcert -cert-file infra/keycloak/certs/localhost.pem -key-file infra/keycloak/certs/localhost-key.pem localhost
 
 # UI (HTTPS on 443)
-mkcert -cert-file services/ui/certs/localhost.pem -key-file services/ui/certs/localhost-key.pem localhost
+# UI certs (news and portal)
+mkcert -cert-file services/ui-news/certs/localhost.pem -key-file services/ui-news/certs/localhost-key.pem localhost
+mkcert -cert-file services/ui-portal/certs/localhost.pem -key-file services/ui-portal/certs/localhost-key.pem localhost
 ```
 
 - Or run: `tools/bootstrap.sh` (builds services and provisions certs if needed)
 
-Compose mounts these certs automatically for [infra/keycloak](infra/keycloak) and [services/ui](services/ui) containers.
+Compose mounts these certs automatically for [infra/keycloak](infra/keycloak), [services/ui-news](services/ui-news), and [services/ui-portal](services/ui-portal).
+
+## Dev Credentials
+
+- Keycloak Admin: admin / admin
+- News Realm User: news / news
+- Portal Realm User: portal / portal
+
+Login URLs:
+- News UI: https://localhost
+- Portal UI: https://localhost:4443
+
+Clients (OIDC):
+- News: `news-web` (PKCE S256, redirect `https://localhost/*`)
+- Portal: `portal-web` (PKCE S256, redirect `https://localhost:4443/*`)
+
+Reset stack (drop and bootstrap):
+
+```bash
+tools/drop.sh
+tools/bootstrap.sh
+```
+
+### Linting
+
+- API: `npm run lint --prefix services/api`
+- RSS MCP: `npm run lint --prefix services/rss-mcp`
+- UI-News: `npm run lint --prefix services/ui-news`
+- UI-Portal: `npm run lint --prefix services/ui-portal`
+
+Notes:
+- Lint uses ESLint v8 with simple configs; TypeScript rules are relaxed to allow temporary `any` and ignore underscore-prefixed unused vars.
+- Run all:
+  - `npm run lint --prefix services/api && npm run lint --prefix services/rss-mcp && npm run lint --prefix services/ui-news && npm run lint --prefix services/ui-portal`
+```

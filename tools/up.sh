@@ -30,12 +30,13 @@ done
 
 echo "Using compose file: $COMPOSE_FILE"
 
-# Warn if UI certs are missing (will fall back to self-signed in container)
-UI_CERT_DIR="$REPO_ROOT/services/ui/certs"
-if [[ ! -f "$UI_CERT_DIR/localhost.crt" || ! -f "$UI_CERT_DIR/localhost.key" ]]; then
-  echo "[warn] mkcert certs not found in $UI_CERT_DIR (localhost.crt/key)."
-  echo "       UI will use a self-signed cert and browsers may warn."
-fi
+# Warn if UI certs are missing for either UI (will fall back to self-signed)
+for UI_DIR in "$REPO_ROOT/services/ui-news/certs" "$REPO_ROOT/services/ui-portal/certs"; do
+  if [[ ! -f "$UI_DIR/localhost.pem" || ! -f "$UI_DIR/localhost-key.pem" ]]; then
+    echo "[warn] mkcert certs not found in $UI_DIR (localhost.pem/key)."
+    echo "       UI will use a self-signed cert and browsers may warn."
+  fi
+done
 
 if [[ "$NO_BUILD" == true ]]; then
   docker compose -f "$COMPOSE_FILE" up -d

@@ -66,8 +66,8 @@ function ensure_db() {
 }
 
 function up_rest() {
-  echo "[bootstrap] Starting AI + UI services ..."
-  docker compose -f "$COMPOSE_FILE" up -d --build ai-service ui
+  echo "[bootstrap] Starting API, RSS MCP, and both UIs ..."
+  docker compose -f "$COMPOSE_FILE" up -d --build api rss-mcp ui-news ui-portal
 }
 
 function health() {
@@ -85,4 +85,4 @@ ensure_db
 up_rest
 health
 
-echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432"
+echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432 | UI-News: https://localhost | UI-Portal: https://localhost:4443 | API: http://localhost:9000/healthz | RSS: http://localhost:9002/healthz"

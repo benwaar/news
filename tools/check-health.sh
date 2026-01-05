@@ -7,7 +7,8 @@ function check_endpoint() {
   local url="$1"
   local name="$2"
   echo -n "Checking $name at $url ... "
-  if curl -fsS "$url" > /dev/null; then
+  # Use -k to ignore TLS verification for local dev certs
+  if curl -fsSk "$url" > /dev/null; then
     echo "OK"
     return 0
   else
@@ -45,7 +46,8 @@ function check_db() {
 
 ensure_docker_up
 
-check_endpoint "http://localhost:8081" "Keycloak (login page)"
+# Prefer HTTPS for Keycloak (8443); 302 redirect to admin is expected
+check_endpoint "https://localhost:8443" "Keycloak (HTTPS)"
 check_endpoint "http://localhost:9000/healthz" "API service"
 check_endpoint "http://localhost:9002/healthz" "RSS MCP"
 check_db

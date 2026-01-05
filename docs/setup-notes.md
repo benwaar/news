@@ -17,7 +17,7 @@
     - [Use mkcert](#use-mkcert)
     - [Config dev domain](#config-dev-domain)
     - [Docker \& Docker Compose](#docker--docker-compose)
-    - [Angular UI (Nginx) with trusted HTTPS](#angular-ui-nginx-with-trusted-https)
+    - [Angular UIs (Nginx) with trusted HTTPS](#angular-uis-nginx-with-trusted-https)
   - [Git Hooks](#git-hooks)
     - [MicroK8s](#microk8s)
   - [Kubernetes Setup](#kubernetes-setup)
@@ -29,6 +29,9 @@
     - [copy the files to a folder then chmod the key](#copy-the-files-to-a-folder-then-chmod-the-key)
     - [Run Keycloack using ssl keys](#run-keycloack-using-ssl-keys)
     - [Navigate to Keycloak](#navigate-to-keycloak)
+  - [Keycloak Realms and Themes](#keycloak-realms-and-themes)
+    - [Test Theme Selection (Login Pages)](#test-theme-selection-login-pages)
+    - [PKCE Testing Helper](#pkce-testing-helper)
   - [Pyenv (manage multiple versions of Python)](#pyenv-manage-multiple-versions-of-python)
   - [Python Version Setup](#python-version-setup)
     - [2. Create Virtual Environment](#2-create-virtual-environment)
@@ -36,7 +39,7 @@
   - [VS Code Debugging](#vs-code-debugging)
     - [Python API](#python-api)
     - [Node API](#node-api)
-    - [Angular UI](#angular-ui)
+    - [Angular UIs](#angular-uis)
     - [Troubleshooting](#troubleshooting)
   
 
@@ -109,15 +112,17 @@ brew install docker-compose
 
 And Download Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/).
 
-### Angular UI (Nginx) with trusted HTTPS
+### Angular UIs (Nginx) with trusted HTTPS
 
-To serve the Angular UI over HTTPS locally without browser warnings, generate and mount mkcert certificates into the UI container.
+Two UIs are available: `ui-news` and `ui-portal`. Each serves over HTTPS with mkcert dev certs.
+
+To serve either UI over HTTPS locally without browser warnings, generate and mount mkcert certificates into each UI container.
 
 - Create certs in the repo so Docker can mount them:
 
 ```sh
 # From repo root
-cd services/ui
+cd services/ui-news
 brew install mkcert nss   # if not already installed
 mkcert -install
 mkcert localhost          # creates cert key pair in current folder
@@ -126,24 +131,31 @@ mkcert localhost          # creates cert key pair in current folder
 mkdir -p certs
 mv localhost.pem certs/
 mv localhost-key.pem certs/
+
+# Repeat for portal UI
+cd ../../services/ui-portal
+mkcert localhost
+mkdir -p certs
+mv localhost.pem certs/
+mv localhost-key.pem certs/
 ```
 
 - Compose mounts these into Nginx at `/etc/nginx/certs` and the nginx config uses them for TLS. If the mount is missing, the Docker image will fall back to generating a self-signed cert inside the container (you will see a browser warning).
 
-- Bring up the UI and backends:
+- Bring up the UIs and backends:
 
 ```sh
 # From repo root
-docker compose -f infra/docker-compose.yml up --build -d ui
+docker compose -f infra/docker-compose.yml up --build -d ui-news ui-portal
 ```
 
-- Access the UI at `https://localhost`. HTTP (`http://localhost`) is automatically redirected to HTTPS.
+- Access News UI at `https://localhost` and Portal UI at `https://localhost:4443`. HTTP routes are redirected to HTTPS.
 
 - API proxying: Nginx forwards `/api` to the game service and `/ai` to the AI service over HTTPS. Ensure those services are up (compose `depends_on` handles startup order).
 
 Troubleshooting tips:
 - If you see the default "Welcome to nginx!" page, ensure compose mounted the certs and the image was rebuilt; the UI should be served from `dist/ui/browser`.
-- If the browser shows a certificate warning, verify the `certs` folder exists at `services/ui/certs` and contains `localhost.pem` and `localhost-key.pem`, and re-run `mkcert -install` if needed.
+- If the browser shows a certificate warning, verify the `certs` folder exists at `services/ui-news/certs` and `services/ui-portal/certs` and contains `localhost.pem` and `localhost-key.pem`, and re-run `mkcert -install` if needed.
 
 ## Git Hooks
 
@@ -254,6 +266,55 @@ docker run \
 ### Navigate to Keycloak
 
   https://localhost:8443/admin
+
+## Keycloak Realms and Themes
+
+Two realms are preconfigured and auto-imported when the stack starts:
+
+- **news**: uses the `news` theme. Config in [infra/keycloak/realm-news.json](infra/keycloak/realm-news.json) and theme at [infra/keycloak/themes/news](infra/keycloak/themes/news).
+- **portal**: uses the `portal` theme. Config in [infra/keycloak/realm-portal.json](infra/keycloak/realm-portal.json) and theme at [infra/keycloak/themes/portal](infra/keycloak/themes/portal).
+
+Admin console:
+- Sign in at https://localhost:8443/admin with `admin/admin`.
+- Use the realm selector (top-left) to switch between `news` and `portal`.
+
+Seeded users:
+- `news` realm: username `test`, password `test`.
+- `portal` realm: username `portal-user`, password `portal`.
+
+### Test Theme Selection (Login Pages)
+
+Trigger an OIDC login to see each realm's themed login page:
+
+```bash
+# News realm: initiate login for news-web client
+open 'https://localhost:8443/realms/news/protocol/openid-connect/auth?client_id=news-web&redirect_uri=https%3A%2F%2Flocalhost%2F&response_type=code&scope=openid'
+
+# Portal realm: initiate login for portal-web client
+open 'https://localhost:8443/realms/portal/protocol/openid-connect/auth?client_id=portal-web&redirect_uri=https%3A%2F%2Flocalhost%2F&response_type=code&scope=openid'
+```
+
+### PKCE Testing Helper
+
+Use the local helper to generate a `code_verifier` and S256 `code_challenge` for testing/debugging login flows:
+
+```bash
+python3 tools/pkce.py --json
+# Example usage in a login URL (replace the values):
+open "https://localhost:8443/realms/news/protocol/openid-connect/auth?client_id=news-web&redirect_uri=https%3A%2F%2Flocalhost%2F&response_type=code&scope=openid&code_challenge_method=S256&code_challenge=REPLACE_ME"
+```
+
+If you change theme assets, rebuild Keycloak to pick up changes:
+
+```bash
+# From repo root
+docker compose -f infra/docker-compose.yml build keycloak
+docker compose -f infra/docker-compose.yml up -d keycloak
+```
+
+Implementation notes:
+- Theme resources must be under `resources/` within each theme folder (e.g., CSS at [infra/keycloak/themes/news/resources/css/news.css](infra/keycloak/themes/news/resources/css/news.css)).
+- Realms are auto-imported from [infra/keycloak/Dockerfile](infra/keycloak/Dockerfile) via `start-dev --import-realm` in compose.
 
 
 ## Pyenv (manage multiple versions of Python)
@@ -399,8 +460,8 @@ If using FastAPI with Uvicorn, swap to:
 }
 ```
 
-### Angular UI
-- Serve: Run `ng serve` in `services/ui`.
+### Angular UIs
+- Serve: Run `ng serve` in `services/ui-news` or `services/ui-portal`.
 - Debug: Chrome attach config with proper `webRoot` for source maps:
 
 ```json
@@ -412,7 +473,7 @@ If using FastAPI with Uvicorn, swap to:
       "type": "pwa-chrome",
       "request": "launch",
       "url": "http://localhost:4200",
-      "webRoot": "${workspaceFolder}/services/ui"
+      "webRoot": "${workspaceFolder}/services/ui-news"
     }
   ]
 }

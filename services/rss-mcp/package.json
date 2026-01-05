@@ -5,10 +5,14 @@
   "type": "commonjs",
   "engines": { "node": ">=22" },
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "lint": "eslint src"
   },
   "dependencies": {
     "express": "^4.19.2",
     "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
   }
 }

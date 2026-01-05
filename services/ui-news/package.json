@@ -5,7 +5,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "ng serve --host 0.0.0.0 --port 4200",
-    "build": "ng build"
+    "build": "ng build",
+    "lint": "eslint --ext .ts src"
   },
   "dependencies": {
     "@angular/core": "^17.3.0",
@@ -19,6 +20,9 @@
     "@angular/cli": "^17.3.0",
     "@angular/compiler-cli": "^17.3.0",
     "@angular-devkit/build-angular": "^17.3.0",
-    "typescript": "~5.4.0"
+    "typescript": "~5.4.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0"
   }
 }
