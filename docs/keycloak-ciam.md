@@ -27,11 +27,11 @@ Keycloak, Identity Integrations
 
 ---
 
-# PHASE 0 — BASELINE (DO THIS ONCE)
+# PHASE 0 ✅ — BASELINE
 ## Goal
 Make sure each UI is a proper OIDC client and you can validate tokens locally.
 
-### 0.1 Create OIDC clients for the UIs `[✓]`
+### 0.1 Create OIDC clients for the UIs
 In **each realm**, create a client for the UI that belongs to it.
 
 - Realm: `portal`
@@ -47,7 +47,7 @@ In **each realm**, create a client for the UI that belongs to it.
   - Client ID: `news-web` (preconfigured)
   - Same settings (preconfigured), with `https://localhost/*`
 
-### 0.2 API client + JWT validation `[✓]`
+### 0.2 API client + JWT validation
 In realm `news`:
 - Create client: `news-api`
 - Type: OIDC
@@ -67,7 +67,7 @@ In realm `news`:
 
 ---
 
-# PHASE 1 — OIDC REALM-TO-REALM BROKERING (FAST PROOF)
+# PHASE 1 ✅ — OIDC REALM-TO-REALM BROKERING (FAST PROOF)
 ## Goal
 User hits `news` → redirected to `portal` login → authenticated → returned to `news` → `news` issues its own tokens.
 
@@ -126,6 +126,11 @@ Save.
 - Bind this flow as:
   - Realm Settings → Login → Browser Flow = `browser-with-idp`
 
+Configured via script:
+- Run [tools/configure-phase1-redirector.sh](tools/configure-phase1-redirector.sh) to copy the flow, set `defaultProvider=portal-oidc`, and bind `browser-with-idp` as the Browser Flow.
+- Revert (optional):
+  - Set Browser Flow back to `browser` if you want to disable auto-redirect.
+
 ---
 
 ## 4. TEST OIDC SSO (REQUIRED)
@@ -140,6 +145,26 @@ Save.
 
 ✅ OIDC brokering confirmed
 
+---
+Dev backchannel note (local HTTPS):
+- Front-channel stays HTTPS for the browser (redirects and login at `https://localhost:8443`).
+- For the broker’s backchannel token exchange, we use Keycloak’s internal HTTP endpoint to avoid mkcert trust issues inside the container:
+  - authorizationUrl: `https://localhost:8443/realms/portal/protocol/openid-connect/auth`
+  - tokenUrl: `http://localhost:8080/realms/portal/protocol/openid-connect/token`
+  - useDiscovery: `true`, useJwksUrl: `true`, disableTrustManager: `true` (dev-only)
+
+Configured via script:
+- We apply this automatically with [tools/configure-phase1-oidc.sh](tools/configure-phase1-oidc.sh). It creates `news-broker` in `portal` and adds the `portal-oidc` IdP in `news` with the above settings.
+
+Manual steps parity (if configuring in the console):
+- Portal realm → Clients → `news-broker` (confidential), Redirect URIs: `https://localhost:8443/realms/news/broker/*`.
+- News realm → Identity Providers → OpenID Connect:
+  - Alias: `portal-oidc`
+  - Issuer: `https://localhost:8443/realms/portal`
+  - Client ID/Secret: from `news-broker`
+  - Default Scopes: `openid profile email`
+  - For local dev only: set Authorization URL (above), Token URL to the internal HTTP (above), enable Discovery + JWKS, and consider `disableTrustManager=true`.
+  - Production: import the mkcert (or real) CA into Keycloak’s truststore, keep HTTPS for tokenUrl, and remove `disableTrustManager`.
 ---
 
 # PHASE 1.5 — CIAM “APP FUNDAMENTALS” (ADD ON TOP)
