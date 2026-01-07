@@ -1,4 +1,5 @@
-# CIAM SSO Learning Plan (Trying out Keycloak)
+# Identity & Authentication UX - CIAM SSO Learning Plan (Trying out Keycloak)
+
 ## Phase 1: OIDC Brokering → Phase 2: SAML Brokering (REQUIRED) → Phase 3: Social Login
 
 ---
