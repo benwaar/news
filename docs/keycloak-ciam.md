@@ -1,4 +1,16 @@
-# Identity & Authentication UX - CIAM SSO Learning Plan (Trying out Keycloak)
+# Identity & Authentication UX - CIAM SSO Lab (Trying out Keycloak)
+
+The first part of this project explores **Identity & Authentication UX** from a hands-on, integration-focused perspective.  
+It focuses on how real users experience login, SSO, and federation flows — and how those UX decisions intersect with security, protocols, and platform constraints.
+
+Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC, SAML, and social login patterns as they are commonly implemented in modern web applications, with an emphasis on **secure-by-design UX** rather than theory.
+
+### Topics / Keywords
+Identity UX, Authentication UX, Secure UX, CIAM, SSO  
+OIDC, OAuth2, PKCE, SAML, Federation  
+MFA, Account Linking, Social Login  
+Frontend Security, AppSec, Web Security  
+Keycloak, Identity Integrations
 
 ## Phase 1: OIDC Brokering → Phase 2: SAML Brokering (REQUIRED) → Phase 3: Social Login
 

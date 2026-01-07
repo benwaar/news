@@ -97,9 +97,12 @@ Definition of authority:
 
 Deliverables:
 - [setup-notes.md](docs/setup-notes.md): setup a fresh local environment
+- [keycloak-ciam.md](docs/keycloak-ciam.md): Keycloak CIAM tests and setup notes
 - spec.md: definitions of “new”, “duplicate”, “novel”, output format, non-goals
 - plan.md: components + boundaries (FastAPI server, storage, MCP client, embeddings)
 - tasks.md: first implementation sequence
+- lint.md: baseline linting guidance and rules for services and UIs (JS/TS/Angular)
+
 
 Acceptance:
 - Specs exist and are readable
