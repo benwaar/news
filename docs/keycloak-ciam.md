@@ -1,5 +1,5 @@
 # CIAM SSO Learning Plan (Trying out Keycloak)
-## Phase 1: OIDC Brokering → Phase 2: SAML Brokering (REQUIRED)
+## Phase 1: OIDC Brokering → Phase 2: SAML Brokering (REQUIRED) → Phase 3: Social Login
 
 ---
 
@@ -121,58 +121,31 @@ Save.
 
 ---
 
-# PHASE 1.5 — CIAM “APP FUNDAMENTALS” (ADD ON TOP)  
-*(These make it feel like real CIAM. Marked required vs optional.)*
+# PHASE 1.5 — CIAM “APP FUNDAMENTALS” (ADD ON TOP)
 
 ## 1.5.1 Account linking + duplication controls (REQUIRED)
-Goal: don’t create a new user every time the broker is used.
-
-- In `news` realm:
-  - Ensure the broker maps **email** and sets it as a user attribute
-  - First Login Flow: `review profile` (already set)
-  - Ensure “Trust Email” only if you’re comfortable for the test; otherwise map + verify
-
-✅ Test: login twice via broker → same user is reused.
+- Ensure broker maps **email**
+- First Login Flow: `review profile`
+- Be explicit about Trust Email
 
 ## 1.5.2 Claims & token design (REQUIRED)
-Goal: see what claims you get and intentionally add a few.
-
-- In `news` realm:
-  - Add protocol mappers to `news-ui` / `news-api`:
-    - `email` claim
-    - `preferred_username`
-    - (optional) `groups` or `roles` claim
-
-✅ Test: decode access token and ID token and confirm claims appear where expected.
+- Add mappers:
+  - `email`
+  - `preferred_username`
+  - (optional) `groups` / `roles`
 
 ## 1.5.3 Authorization baseline (REQUIRED)
-Goal: separate “logged in” from “allowed to do X”.
-
-- In `news` realm:
-  - Create a role: `news:admin` (or `editor`)
-  - Assign it to a test user
-- In your API:
-  - Protect one endpoint with role/scope checks
-
-✅ Test: normal user fails, admin succeeds.
+- Create role: `news:admin` (or similar)
+- Protect at least one API endpoint
 
 ## 1.5.4 MFA + step-up (OPTIONAL, NICE-TO-HAVE)
-Goal: learn a key CIAM security pattern.
-
-- In `portal` realm:
-  - Enable OTP (TOTP) required for a test user (or conditional flow if you want to go deeper)
-- Optional: require MFA only for “admin” users or only for certain actions.
-
-✅ Test: broker login triggers MFA at portal, then returns to news.
+- Enable OTP in `portal`
+- Optionally require it only for admin users
 
 ## 1.5.5 Self-service lifecycle (OPTIONAL, NICE-TO-HAVE)
-Goal: common CIAM flows users expect.
-
-- In `portal` realm:
-  - enable/verify:
-    - forgot password
-    - email verification (if you have local SMTP / mailhog)
-    - required actions (update profile)
+- Forgot password
+- Email verification
+- Required actions (update profile)
 
 ---
 
@@ -183,58 +156,37 @@ Replace OIDC broker with SAML while keeping behavior identical.
 ---
 
 ## 5. NEWS REALM — CREATE SAML IDP (SP METADATA) (REQUIRED)
-- Realm: `news`
 - Identity Providers → Add → SAML v2.0
 - Alias: `portal-saml`
-- Click **Import config from SP metadata** (or save empty first)
-
-### Copy these values AFTER save (REQUIRED)
-- Entity ID
-- ACS URL
-These define the NEWS realm as a SAML Service Provider.
+- Save, then copy:
+  - Entity ID
+  - ACS URL
 
 ---
 
 ## 6. PORTAL REALM — CREATE SAML CLIENT (IdP SIDE) (REQUIRED)
-- Realm: `portal`
-- Clients → Create
-- Client type: SAML
-- Client ID: (Entity ID from news realm)
-- Name: `news-saml-broker`
-
-### Settings (REQUIRED)
-- Valid Redirect URIs: ACS URL from news realm
+- Clients → Create → SAML
+- Client ID: (Entity ID)
+- Valid Redirect URIs: ACS URL
 - NameID Format: email
-- Force NameID format: ON
 - Sign Assertions: ON
-- Sign Documents: OFF (simpler locally)
-- Client Signature Required: OFF (can turn ON later)
-
-### Mappers (REQUIRED)
-Add mappers:
-- email → email
-- firstName → given_name
-- lastName → family_name
-
-Save.
+- Mappers:
+  - email → email
+  - firstName → given_name
+  - lastName → family_name
 
 ---
 
 ## 7. NEWS REALM — IMPORT PORTAL METADATA (REQUIRED)
-- Back to `portal-saml` IdP in news realm
-- Import IdP metadata from portal realm SAML client
-- Set:
-  - Trust Email: ON (local testing)
-  - First Login Flow: review profile
-  - Want AuthnRequests Signed: OFF (initially)
-  - Validate Signatures: ON (once keys are correct)
-
-Save.
+- Import IdP metadata from portal SAML client
+- Trust Email: ON (local testing)
+- First Login Flow: review profile
+- Want AuthnRequests Signed: OFF (initially)
+- Validate Signatures: ON (once keys are correct)
 
 ---
 
 ## 8. SWITCH REDIRECTOR TO SAML (REQUIRED IF USING REDIRECTOR)
-- Update Identity Provider Redirector
 - Default IdP: `portal-saml`
 
 ---
@@ -248,8 +200,8 @@ Save.
   - Return to NEWS UI
 - Revisit NEWS UI:
   - No login prompt
-
-✅ SAML brokering confirmed
+  
+✅ news → portal login → back to news, no prompt on revisit
 
 ---
 
@@ -258,35 +210,82 @@ Save.
 Make sure SAML behaves like OIDC did (and learn what differs).
 
 ## 2.5.1 Attribute mapping parity (REQUIRED)
-- Ensure email + name attributes arrive from SAML and map correctly in `news`.
-
-✅ Test: same user reused; profile fields populated.
+- Email + names mapped correctly
+- Same user reused
 
 ## 2.5.2 Signing & validation tightening (OPTIONAL, NICE-TO-HAVE)
-- Turn on AuthnRequest signing (news → portal)
-- Require client signature (portal side)
-- Confirm signature validation errors are understandable
-
-✅ Test: break certs intentionally and confirm failure modes.
+- Sign AuthnRequests
+- Require client signatures
+- Intentionally break certs and observe errors
 
 ## 2.5.3 Logout behavior learning (OPTIONAL, NICE-TO-HAVE)
-- Test front-channel logout from news and portal
-- Observe what propagates and what doesn’t (document it)
+- Test logout flows
+- Document what propagates and what doesn’t
+
+---
+
+# PHASE 3 — SOCIAL LOGIN (PORTAL REALM)
+## Goal
+Aggregate social IdPs in `portal`, then broker users into `news` exactly as before.
+
+---
+
+## 10. ADD SOCIAL IDENTITY PROVIDER TO PORTAL (REQUIRED)
+Pick **one** to start (GitHub easiest; Google also common).
+
+- Realm: `portal`
+- Identity Providers → Add (GitHub / Google / etc.)
+- Register Keycloak redirect URI with the provider
+- Request scopes that return **email**
+- Map:
+  - email
+  - firstName
+  - lastName
+
+---
+
+## 11. ACCOUNT LINKING RULES FOR SOCIAL (REQUIRED)
+- Decide linking strategy:
+  - link by verified email (typical CIAM)
+- Keep First Login Flow: `review profile`
+
+✅ Test:
+- Local user + social user with same email
+- Confirm expected linking behavior
+
+---
+
+## 12. END-TO-END SOCIAL → SAML TEST (REQUIRED)
+- Visit NEWS UI
+- Redirect to PORTAL
+- Choose social login
+- Authenticate at provider
+- Return to NEWS UI
+- NEWS realm issues access token
+
+✅ Social → Portal → SAML → News confirmed
+
+---
+
+## OPTIONAL SOCIAL HARDENING (NICE-TO-HAVE)
+- Domain allowlist (B2B-style)
+- Disable local registration, keep social-only
+- Require MFA after social login for privileged roles
 
 ---
 
 ## EXPECTED GOTCHAS (NORMAL)
-- Logout may not propagate cleanly (especially brokered + SAML)
-- Duplicate users if email mapping is wrong
-- Tokens are issued by NEWS realm (not portal)
-- “SSO across realms” happens via brokering, not shared realm cookies
+- Some providers don’t return email without extra scopes
+- Email may be unverified (provider-dependent)
+- Logout across social + brokered SAML can be inconsistent
 
 ---
 
 ## SUCCESS CHECKLIST
-- [ ] News auto-redirects to portal (optional if you prefer an IdP button)
+- [ ] News auto-redirects to portal (optional)
 - [ ] Single login works across reloads
 - [ ] Same user reused (no duplicates)
 - [ ] News realm issues its own access token and API validates it
 - [ ] Roles/scopes enforced on at least one API endpoint
-- [ ] SAML broker flow works end-to-end (required)
+- [ ] SAML broker flow works end-to-end
+- [ ] Social login works through portal into news
