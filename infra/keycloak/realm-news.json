@@ -41,10 +41,10 @@
       "clientId": "news-api",
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "CHANGE_ME_IN_PROD",
-      "serviceAccountsEnabled": true,
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "bearerOnly": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
       "redirectUris": [],
       "webOrigins": []
     }

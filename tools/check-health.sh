@@ -1,55 +1,69 @@
-#!/bin/bash
-# Check health endpoints for Phase 1 services
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
 
-function check_endpoint() {
-  local url="$1"
-  local name="$2"
-  echo -n "Checking $name at $url ... "
-  # Use -k to ignore TLS verification for local dev certs
-  if curl -fsSk "$url" > /dev/null; then
-    echo "OK"
-    return 0
-  else
-    echo "FAILED"
-    return 1
-  fi
+KEYCLOAK_OIDC="https://localhost:8443/realms/news/.well-known/openid-configuration"
+KEYCLOAK_ADMIN="https://localhost:8443/admin"
+UI_NEWS="https://localhost/"
+UI_PORTAL="https://localhost:4443/"
+NEWS_API="http://localhost:9000/healthz"
+RSS_MCP="http://localhost:9002/healthz"
+
+PASS=0
+FAIL=0
+
+log() {
+	printf "%s\n" "$*"
 }
 
+check() {
+	local name="$1"; shift
+	local url="$1"; shift
+	local opts=("-fsS" "--max-time" "6" "-k" "-o" "/dev/null" "-w" "%{http_code}")
 
-function ensure_docker_up() {
-  local running
-  running=$(docker ps --format '{{.Names}}' | grep -E 'infra-keycloak-dev|infra-api-dev|infra-rss-mcp-dev|infra-db-dev' | wc -l || true)
-  if [ "$running" -lt 4 ]; then
-    echo "[health] Some services are not running. Starting core stack (keycloak, db, api, rss-mcp) ..."
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    ROOT_DIR="$SCRIPT_DIR/.."
-    docker compose -f "$ROOT_DIR/infra/docker-compose.yml" up -d keycloak db api rss-mcp
-    sleep 3
-  fi
+	local code
+	code="$(curl "${opts[@]}" "$url" || true)"
+	if [[ "$code" == 2* || "$code" == 3* ]]; then
+		log "✅ ${name}: OK (${code}) — ${url}"
+		((PASS++)) || true
+	else
+		log "❌ ${name}: FAIL (${code:-curl error}) — ${url}"
+		((FAIL++)) || true
+	fi
 }
 
-function check_db() {
-  echo -n "Checking Postgres (SELECT 1) ... "
-  local attempts=0
-  until docker exec -e PGPASSWORD=news infra-db-dev psql -U news -d news -c 'SELECT 1;' >/dev/null 2>&1; do
-    attempts=$((attempts+1))
-    if [[ $attempts -ge 10 ]]; then
-      echo "FAILED"
-      return 1
-    fi
-    sleep 1
-  done
-  echo "OK"
+section() {
+	printf "\n== %s ==\n" "$*"
 }
 
-ensure_docker_up
+section "Docker status"
+if command -v docker >/dev/null 2>&1; then
+	if docker compose version >/dev/null 2>&1; then
+		docker compose -f "$ROOT_DIR/infra/docker-compose.yml" ps || true
+	else
+		docker ps || true
+	fi
+else
+	log "Docker not installed or not on PATH; skipping container status."
+fi
 
-# Prefer HTTPS for Keycloak (8443); 302 redirect to admin is expected
-check_endpoint "https://localhost:8443" "Keycloak (HTTPS)"
-check_endpoint "http://localhost:9000/healthz" "API service"
-check_endpoint "http://localhost:9002/healthz" "RSS MCP"
-check_db
+section "Endpoint checks"
+check "Keycloak OIDC" "$KEYCLOAK_OIDC"
+check "Keycloak Admin" "$KEYCLOAK_ADMIN"
+check "UI: news" "$UI_NEWS"
+check "UI: portal" "$UI_PORTAL"
+check "news-api /healthz" "$NEWS_API"
+check "rss-mcp /healthz" "$RSS_MCP"
 
-echo "All health checks completed."
+section "Summary"
+log "Passed: ${PASS}  Failed: ${FAIL}"
+if [[ "$FAIL" -gt 0 ]]; then
+	log "Some checks failed. Common fixes:"
+	log "- Ensure the stack is up: docker compose -f infra/docker-compose.yml up -d"
+	log "- Wait 10-20s for Keycloak to finish starting on first run"
+	log "- If TLS errors occur, note that -k is used for self-signed certs"
+	exit 1
+fi
+
+exit 0

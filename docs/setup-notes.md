@@ -157,6 +157,26 @@ Troubleshooting tips:
 - If you see the default "Welcome to nginx!" page, ensure compose mounted the certs and the image was rebuilt; the UI should be served from `dist/ui/browser`.
 - If the browser shows a certificate warning, verify the `certs` folder exists at `services/ui-news/certs` and `services/ui-portal/certs` and contains `localhost.pem` and `localhost-key.pem`, and re-run `mkcert -install` if needed.
 
+### Rebuild / Apply Changes
+
+When you change the API or UIs, rebuild only what’s needed and restart:
+
+```bash
+# From repo root
+docker compose -f infra/docker-compose.yml build news-api ui-news ui-portal
+docker compose -f infra/docker-compose.yml up -d news-api rss-mcp ui-news ui-portal
+
+# Or run full bootstrap (includes realm config + health checks)
+zsh tools/bootstrap.sh
+
+# Manual endpoint verification (optional)
+bash tools/check-health.sh
+```
+
+Quick test from the News UI:
+- Visit https://localhost and click Login.
+- After login, use "Validate Token" to call `/api/token/validate` and "Fetch RSS" to call `/api/rss`.
+- Both are proxied through Nginx and require a valid bearer token.
 ## Git Hooks
 
 Enable repository git hooks so the pre-commit hook enforces protobuf generation stays clean when `proto/**` changes.
@@ -221,7 +241,7 @@ https://www.keycloak.org/getting-started/getting-started-docker
 
 docker run -p 127.0.0.1:8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:26.3.3 start-dev
 
-http://localhost:8080/admin
+https://localhost:8443/admin
 
 ## Keycloak Local SSL
 
@@ -472,7 +492,7 @@ If using FastAPI with Uvicorn, swap to:
       "name": "Debug Angular UI (Chrome)",
       "type": "pwa-chrome",
       "request": "launch",
-      "url": "http://localhost:4200",
+      "url": "https://localhost",
       "webRoot": "${workspaceFolder}/services/ui-news"
     }
   ]

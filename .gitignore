@@ -1,7 +1,7 @@
 # Ignore build dependencies
 services/ui-news/node_modules/
 services/ui-portal/node_modules/
-services/api/node_modules/
+services/news-api/node_modules/
 services/rss-mcp/node_modules/
 
 # Ignore UI build artifacts

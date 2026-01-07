@@ -7,7 +7,7 @@ set -euo pipefail
 # - Imports News realm via kcadm
 # - Creates Postgres role/db 'news' if missing
 # - Starts AI + UI services
-# - Runs health checks
+# - Health checks: run at the end to verify endpoints
 
 REPO_ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 COMPOSE_FILE="$REPO_ROOT/infra/docker-compose.yml"
@@ -67,12 +67,16 @@ function ensure_db() {
 
 function up_rest() {
   echo "[bootstrap] Starting API, RSS MCP, and both UIs ..."
-  docker compose -f "$COMPOSE_FILE" up -d --build api rss-mcp ui-news ui-portal
+  docker compose -f "$COMPOSE_FILE" up -d --build news-api rss-mcp ui-news ui-portal
 }
 
-function health() {
+function run_health() {
   echo "[bootstrap] Running health checks ..."
-  "$REPO_ROOT"/tools/check-health.sh || true
+  if command -v bash >/dev/null 2>&1; then
+    bash "$REPO_ROOT/tools/check-health.sh"
+  else
+    "$REPO_ROOT/tools/check-health.sh"
+  fi
 }
 
 echo "Using compose file: $COMPOSE_FILE"
@@ -83,6 +87,6 @@ wait_keycloak
 configure_realm
 ensure_db
 up_rest
-health
+run_health
 
-echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432 | UI-News: https://localhost | UI-Portal: https://localhost:4443 | API: http://localhost:9000/healthz | RSS: http://localhost:9002/healthz"
+echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432 | UI-News: https://localhost | UI-Portal: https://localhost:4443"

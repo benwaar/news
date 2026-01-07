@@ -17,13 +17,13 @@ Keycloak, Identity Integrations
 ---
 
 ## Assumptions
-- Keycloak running locally (e.g. http://localhost:8080)
+- Keycloak running locally (e.g. https://localhost:8443)
 - Two realms already exist:
   - `portal` = primary / home realm
   - `news` = relying realm
 - Two UIs:
-  - Portal UI
-  - News UI
+  - Portal UI (https://localhost:4443)
+  - News UI (https://localhost)
 
 ---
 
@@ -31,31 +31,39 @@ Keycloak, Identity Integrations
 ## Goal
 Make sure each UI is a proper OIDC client and you can validate tokens locally.
 
-### 0.1 Create OIDC clients for the UIs (REQUIRED)
+### 0.1 Create OIDC clients for the UIs `[✓]`
 In **each realm**, create a client for the UI that belongs to it.
 
 - Realm: `portal`
-  - Client ID: `portal-ui`
+  - Client ID: `portal-web` (preconfigured)
   - Type: OIDC
   - Public client: ON (typical for SPA)
   - Standard flow: ON
-  - PKCE: S256 required (if available in your version)
-  - Redirect URIs: `http://localhost:<portal-ui-port>/*`
-  - Web Origins: `http://localhost:<portal-ui-port>`
+  - PKCE: S256 required (preconfigured)
+  - Redirect URIs: `https://localhost:4443/*`
+  - Web Origins: `https://localhost:4443`
 
 - Realm: `news`
-  - Client ID: `news-ui`
-  - Same settings, with `http://localhost:<news-ui-port>/*`
+  - Client ID: `news-web` (preconfigured)
+  - Same settings (preconfigured), with `https://localhost/*`
 
-### 0.2 API client + JWT validation (REQUIRED)
-In realm `news` (and/or `portal` if it has APIs):
+### 0.2 API client + JWT validation `[✓]`
+In realm `news`:
 - Create client: `news-api`
 - Type: OIDC
-- Access type: bearer-only (or confidential + no login if bearer-only not available)
+- Access type: bearer-only (preconfigured)
 - Your API validates:
-  - issuer = `http://localhost:8080/realms/news`
+  - issuer = `https://localhost:8443/realms/news`
   - audience = `news-api` (or whatever you set)
   - signature + exp
+  - Test endpoint: `GET https://localhost/api/token/validate` returns a JSON report of these checks
+  - Tip: Use `tools/test-news-api.sh` to obtain a PKCE token for `news-web` and call the protected API.
+
+### 0.3 Session & Storage Guidance `[✓]`
+- SPA clients are public: no client secrets are embedded in the browser.
+- Token storage (dev): UI stores `access_token` in sessionStorage for convenience. Production: prefer in-memory storage or backend-managed `httpOnly` secure cookies to reduce XSS risk.
+- Idle/expiration: Configure Keycloak realm session timeouts (SSO Session Idle/Max). UI detects token `exp` and prompts re-login when expired.
+- Confidential clients: The broker client `news-broker` in `portal` is confidential; its secret is stored in Keycloak only and not exposed to UIs.
 
 ---
 
@@ -79,7 +87,7 @@ User hits `news` → redirected to `portal` login → authenticated → returned
 
 ### Redirect URIs (REQUIRED)
 - Temporarily allow (for local testing):
-  - `http://localhost:8080/realms/news/broker/*`
+  - `https://localhost:8443/realms/news/broker/*`
 - Save
 
 ### Copy (REQUIRED)
@@ -96,7 +104,7 @@ User hits `news` → redirected to `portal` login → authenticated → returned
 
 #### Settings
 - Alias: `portal-oidc`
-- Issuer: `http://localhost:8080/realms/portal`
+- Issuer: `https://localhost:8443/realms/portal`
 - Client ID: `news-broker`
 - Client Secret: (from portal realm)
 - Default Scopes: `openid profile email`

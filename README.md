@@ -243,7 +243,7 @@ Enable repository hooks to guard against committing sensitive files and large ar
 
 The pre-commit hook blocks staged files matching `*.pem`, `*.key`, `*.crt`, `*.env*`, files larger than 5MB, and runs quick lint checks:
 
-- JS services: syntax check (`node --check`) on staged files in [services/api/src](services/api/src) and [services/rss-mcp/src](services/rss-mcp/src).
+- JS services: syntax check (`node --check`) on staged files in [services/news-api/src](services/news-api/src) and [services/rss-mcp/src](services/rss-mcp/src).
 - Angular UI: TypeScript typecheck (`tsc --noEmit`) using the UI’s local compiler.
 
 Skip temporarily with `--no-verify` if needed.
@@ -253,7 +253,7 @@ Skip temporarily with `--no-verify` if needed.
 
 This repository is optimized for local experimentation. For production, consider:
 
-- **ESLint/Formatting:** Add ESLint/Prettier for `services/api`, `services/rss-mcp`, and Angular UI; enforce in CI.
+- **ESLint/Formatting:** Add ESLint/Prettier for `services/news-api`, `services/rss-mcp`, and Angular UI; enforce in CI.
 - **CORS/Rate Limits:** Restrict CORS to known origins and add basic rate limiting to public endpoints.
 - **Container Hardening:** Run as non-root (done), pin images (done), and for k8s set `readOnlyRootFilesystem`, drop capabilities, and add resource requests/limits.
 - **Secrets Management:** Use environment injection (not bake-in) and a secrets manager; keep `.env*` and certs out of VCS (enforced).
@@ -306,7 +306,7 @@ tools/bootstrap.sh
 
 ### Linting
 
-- API: `npm run lint --prefix services/api`
+- API: `npm run lint --prefix services/news-api`
 - RSS MCP: `npm run lint --prefix services/rss-mcp`
 - UI-News: `npm run lint --prefix services/ui-news`
 - UI-Portal: `npm run lint --prefix services/ui-portal`
@@ -314,5 +314,5 @@ tools/bootstrap.sh
 Notes:
 - Lint uses ESLint v8 with simple configs; TypeScript rules are relaxed to allow temporary `any` and ignore underscore-prefixed unused vars.
 - Run all:
-  - `npm run lint --prefix services/api && npm run lint --prefix services/rss-mcp && npm run lint --prefix services/ui-news && npm run lint --prefix services/ui-portal`
+  - `npm run lint --prefix services/news-api && npm run lint --prefix services/rss-mcp && npm run lint --prefix services/ui-news && npm run lint --prefix services/ui-portal`
 ```

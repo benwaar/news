@@ -37,9 +37,9 @@ services:
       start_period: 5s
 
 
-  api:
-    container_name: infra-api-dev
-    build: ../services/api
+  news-api:
+    container_name: infra-news-api-dev
+    build: ../services/news-api
     environment:
       PORT: 9000
     ports:
@@ -68,7 +68,7 @@ services:
       - ../services/ui-news/certs:/etc/nginx/certs:ro
     depends_on:
       - keycloak
-      - api
+      - news-api
       - rss-mcp
     restart: unless-stopped
 
@@ -82,7 +82,7 @@ services:
       - ../services/ui-portal/certs:/etc/nginx/certs:ro
     depends_on:
       - keycloak
-      - api
+      - news-api
       - rss-mcp
     restart: unless-stopped
 
