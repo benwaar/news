@@ -3,7 +3,7 @@
 The first part of this project explores **Identity & Authentication UX** from a hands-on, integration-focused perspective.  
 It focuses on how real users experience login, SSO, and federation flows — and how those UX decisions intersect with security, protocols, and platform constraints.
 
-Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC, SAML, and social login patterns as they are commonly implemented in modern web applications, with an emphasis on **secure-by-design UX** rather than theory.
+Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC & SAML login patterns as they are commonly implemented in modern web applications, with an emphasis on **secure-by-design UX** rather than theory.
 
 ### Topics / Keywords
 Identity UX, Authentication UX, Secure UX, CIAM, SSO  
@@ -24,6 +24,35 @@ Keycloak, Identity Integrations
 - Two UIs:
   - Portal UI (https://localhost:4443)
   - News UI (https://localhost)
+
+---
+
+## Quick Start (Local)
+
+1) Bootstrap core (Keycloak + DB + services):
+
+```bash
+bash tools/bootstrap.sh
+```
+
+2) Configure brokering (run manually after bootstrap):
+
+```bash
+# OIDC broker + IdP
+bash tools/configure-phase1-oidc.sh
+# Optional: auto-redirect to IdP
+bash tools/configure-phase1-redirector.sh
+# Trust email, map claims, create news:admin
+bash tools/configure-phase1-5.sh
+```
+
+3) Verify:
+- Admin: https://localhost:8443/admin (admin/admin)
+- News UI: https://localhost (expect portal login or auto-redirect)
+- Portal UI: https://localhost:4443
+- API health: http://localhost:9000/healthz | RSS: http://localhost:9002/healthz
+
+Note: bootstrap intentionally does not run Phase 1/1.5; execute them as above.
 
 ---
 
@@ -146,6 +175,19 @@ Configured via script:
 ✅ OIDC brokering confirmed
 
 ---
+
+## Scripts Cheat Sheet
+
+- tools/bootstrap.sh: Build/start infra, import realms, start services, health checks
+- tools/drop.sh: Tear down stack, remove images/volumes (full reset)
+- tools/configure-realm.sh: Import `news` realm (used by bootstrap)
+- tools/configure-phase1-oidc.sh: Create `news-broker` in `portal`, add `portal-oidc` IdP in `news`
+- tools/configure-phase1-redirector.sh: Copy `browser` → `browser-with-idp`, set redirector, bind flow
+- tools/configure-phase1-5.sh: Trust email, first-broker-login, mappers, create `news:admin`
+- tools/check-health.sh: Endpoint checks for Keycloak/UI/API/MCP
+- tools/test-news-api.sh: Obtain token and call API helpers (dev convenience)
+
+---
 Dev backchannel note (local HTTPS):
 - Front-channel stays HTTPS for the browser (redirects and login at `https://localhost:8443`).
 - For the broker’s backchannel token exchange, we use Keycloak’s internal HTTP endpoint to avoid mkcert trust issues inside the container:
@@ -187,6 +229,19 @@ Manual steps parity (if configuring in the console):
 
 Configured via script:
 - Run [tools/configure-phase1-5.sh](tools/configure-phase1-5.sh) to set `trustEmail=true`, bind First Login Flow `review profile`, add an IdP email mapper, and create realm role `news:admin` in `news`.
+
+Manual steps parity (if configuring in the console):
+- Realm: `news` → Identity Providers → `portal-oidc`
+  - Trust Email: ON
+  - Default Scopes: include `openid profile email`
+  - First Login Flow: `first broker login` (contains “Review Profile”)
+  - Mappers:
+    - Email: add “User Email” IdP mapper (IdP email → user email)
+    - Username: add “Identity Provider Username” mapper with `Claim=preferred_username`
+    - Optional: add groups/roles mappers if you need those claims
+- Realm Roles → Create: `news:admin`
+- Assign to user: Users → select user → Role Mappings → Assign `news:admin`
+- Validate API protection: `GET https://localhost/api/admin/ping` returns 200 only when token has realm role `news:admin`
 
 
 ---
@@ -286,4 +341,52 @@ Make sure SAML behaves like OIDC did (and learn what differs).
 - [ ] News realm issues its own access token and API validates it
 - [ ] Roles/scopes enforced on at least one API endpoint
 - [ ] SAML broker flow works end-to-end
+
+---
+
+## Token Verification Flow (This Repo)
+
+- Issuer publishes keys (JWKS): Keycloak exposes signing keys at
+  - External: https://localhost:8443/realms/news/protocol/openid-connect/certs
+  - In-cluster (used by API): http://keycloak:8080/realms/news/protocol/openid-connect/certs
+- API verification: [services/news-api/src/index.js](services/news-api/src/index.js) fetches JWKS, selects the key by `kid` from the JWT header, and verifies RS256 signature.
+- Critical checks: issuer (`iss` = `https://localhost:8443/realms/news`), audience (`aud` contains `news-api`), expiration (`exp` > now). Small clock tolerance applied.
+- Authorization: API reads realm roles from `realm_access.roles`; endpoint `/api/admin/ping` requires realm role `news:admin`.
+- Front-channel vs back-channel: Browser redirects/login happen over HTTPS; scripts use internal HTTP for token endpoints only during IdP setup. The API never calls token endpoints—only JWKS for signature verification.
+- Common failures: unknown `kid` (stale JWKS cache), wrong `iss`/`aud`, expired token, or missing required role.
+
+---
+
+## RESOURCES
+
+- Identity Brokering (OIDC IdP, mappers): https://www.keycloak.org/docs/latest/server_admin/#_identity_broker
+- Authentication Flows (incl. Identity Provider Redirector): https://www.keycloak.org/docs/latest/server_admin/#_authentication-flows
+- Protocol Mappers (token claims shaping): https://www.keycloak.org/docs/latest/server_admin/#_protocol-mappers
+- Clients (OIDC: public, confidential, bearer-only): https://www.keycloak.org/docs/latest/server_admin/#_clients
+- JWKS and token validation (OIDC): https://www.keycloak.org/docs/latest/securing_apps/#_oidc_json_web_keys
+- SAML Identity Provider and Clients: https://www.keycloak.org/docs/latest/server_admin/#_saml-identity-provider
+
+## GLOSSARY
+
+- Identity Provider (IdP): The system that authenticates users and issues identities (e.g., realm `portal`).
+- Broker (Keycloak): A realm that delegates user login to an external IdP and then issues its own tokens (e.g., realm `news`).
+- Realm: A partitioned namespace in Keycloak containing users, clients, roles, and flows.
+- Client (OIDC): An application registered in a realm. Public clients (SPAs) use PKCE; confidential clients have a secret (e.g., `news-broker`).
+- Bearer-only client: API-style client that never performs browser login, only validates incoming bearer tokens (e.g., `news-api`).
+- Mapper (IdP): Transforms attributes from the external IdP into Keycloak user attributes on first login/link (e.g., map `email`, `preferred_username`).
+- Mapper (Protocol): Shapes claims in tokens issued to a specific client (add/rename/remove claims in `access_token`/`id_token`).
+- Browser Flow: Authentication flow executed for browser-based logins (e.g., `browser`, `browser-with-idp`).
+- Binding (Flow): Selecting which flow the realm uses for Browser login (Realm Settings → Login → Browser Flow).
+- Identity Provider Redirector: Authenticator step that forwards users directly to a chosen IdP (auto-redirect); configured with `defaultProvider`.
+- First Broker Login flow: Flow run on a user’s first brokered login; includes “Review Profile” and account linking.
+- Trust Email: Accept IdP-provided email as verified. Useful for dev; assess risk before enabling in prod.
+- Default Scope (OIDC): Scopes requested by default (e.g., `openid profile email`) which influence included claims.
+- OIDC: Modern auth protocol. Key terms: issuer (`iss`), audience (`aud`), scopes, claims, `access_token`, `id_token`, JWKS, PKCE.
+- SAML: XML-based federation protocol. Key terms: IdP, SP (service provider), Entity ID, ACS URL, Assertions, NameID, Attributes, Metadata.
+- JWKS: JSON Web Key Set used to publish signing keys so clients can verify token signatures.
+- JWT: JSON Web Token carrying signed claims; header has `alg`/`kid`, body includes claims like `iss`, `aud`, `exp`; verified with issuer’s public key from JWKS (e.g., RS256).
+- PKCE: Proof Key for Code Exchange; protects public clients (SPAs) during the OAuth2/OIDC code flow.
+- Role (Realm vs Client): Realm roles apply across the realm (e.g., `news:admin`); client roles apply only to a specific client.
+- Audience (`aud`): Intended recipient(s) of a token (e.g., `news-api`). APIs should verify audience.
+- Issuer (`iss`): The URL identifying the token’s issuing realm (e.g., `https://localhost:8443/realms/news`).
 
