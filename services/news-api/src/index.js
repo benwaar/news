@@ -58,6 +58,19 @@ function authenticateToken(req, res, next) {
   );
 }
 
+function requireRealmRole(role) {
+  return function (req, res, next) {
+    const roles = (req.user && req.user.realm_access && req.user.realm_access.roles) || [];
+    if (!Array.isArray(roles)) {
+      return res.status(403).json({ error: 'forbidden', detail: 'no realm roles present' });
+    }
+    if (!roles.includes(role)) {
+      return res.status(403).json({ error: 'forbidden', detail: `missing realm role: ${role}` });
+    }
+    next();
+  };
+}
+
 app.use(helmet());
 
 app.get('/healthz', (req, res) => {
@@ -85,6 +98,7 @@ app.get('/token/validate', authenticateToken, (req, res) => {
       sub: req.user?.sub,
       iat: req.user?.iat,
       exp: req.user?.exp,
+      realm_roles: req.user?.realm_access?.roles || [],
     },
     checks: {
       issuer: issOk,
@@ -104,6 +118,11 @@ app.get('/rss', authenticateToken, async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: 'rss-mcp unavailable', detail: String(e) });
   }
+});
+
+// Admin-only endpoint example: requires realm role 'news:admin'
+app.get('/admin/ping', authenticateToken, requireRealmRole('news:admin'), (req, res) => {
+  res.json({ ok: true, message: 'admin pong', sub: req.user?.sub });
 });
 
 app.listen(PORT, () => {

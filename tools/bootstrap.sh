@@ -58,6 +58,30 @@ function configure_realm() {
   "$REPO_ROOT"/tools/configure-realm.sh --force || true
 }
 
+function configure_phase1() {
+  echo "[bootstrap] Configuring Phase 1 (OIDC brokering) ..."
+  if [[ -f "$REPO_ROOT/tools/configure-phase1-oidc.sh" ]]; then
+    bash "$REPO_ROOT"/tools/configure-phase1-oidc.sh || true
+  else
+    echo "[bootstrap] Skipping: tools/configure-phase1-oidc.sh not found"
+  fi
+  # Always enable redirector flow (auto-redirect to IdP)
+  if [[ -f "$REPO_ROOT/tools/configure-phase1-redirector.sh" ]]; then
+    bash "$REPO_ROOT"/tools/configure-phase1-redirector.sh || true
+  else
+    echo "[bootstrap] Skipping: tools/configure-phase1-redirector.sh not found"
+  fi
+}
+
+function configure_phase1_5() {
+  echo "[bootstrap] Configuring Phase 1.5 (trustEmail, mapper, role) ..."
+  if [[ -f "$REPO_ROOT/tools/configure-phase1-5.sh" ]]; then
+    bash "$REPO_ROOT"/tools/configure-phase1-5.sh || true
+  else
+    echo "[bootstrap] Skipping: tools/configure-phase1-5.sh not found"
+  fi
+}
+
 function ensure_db() {
   echo "[bootstrap] Ensuring Postgres role/db 'news' exist ..."
   docker exec -e PGPASSWORD=postgres infra-db-dev psql -U postgres -d postgres -c "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='news') THEN CREATE ROLE news WITH LOGIN PASSWORD 'news' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; END IF; END $$;" >/dev/null 2>&1 || true
@@ -87,6 +111,9 @@ wait_keycloak
 configure_realm
 ensure_db
 up_rest
+# Short delay to let TLS endpoints settle before health checks (always wait 12s)
+echo "[bootstrap] Waiting 12s before health checks ..."
+sleep 12 || true
 run_health
 
 echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432 | UI-News: https://localhost | UI-Portal: https://localhost:4443"

@@ -12,7 +12,7 @@ MFA, Account Linking, Social Login
 Frontend Security, AppSec, Web Security  
 Keycloak, Identity Integrations
 
-## Phase 1: OIDC Brokering → Phase 2: SAML Brokering (REQUIRED) → Phase 3: Social Login
+## Phase 1: OIDC Brokering → Phase 2: SAML Brokering
 
 ---
 
@@ -167,28 +167,37 @@ Manual steps parity (if configuring in the console):
   - Production: import the mkcert (or real) CA into Keycloak’s truststore, keep HTTPS for tokenUrl, and remove `disableTrustManager`.
 ---
 
-# PHASE 1.5 — CIAM “APP FUNDAMENTALS” (ADD ON TOP)
+# PHASE 1.5 ✅ — CIAM “APP FUNDAMENTALS”
 
-## 1.5.1 Account linking + duplication controls (REQUIRED)
+## 1.5.1 Account linking + duplication controls
 - Ensure broker maps **email**
 - First Login Flow: `review profile`
 - Be explicit about Trust Email
 
-## 1.5.2 Claims & token design (REQUIRED)
+## 1.5.2 Claims & token design
 - Add mappers:
   - `email`
   - `preferred_username`
   - (optional) `groups` / `roles`
 
-## 1.5.3 Authorization baseline (REQUIRED)
+## 1.5.3 Authorization baseline 
 - Create role: `news:admin` (or similar)
 - Protect at least one API endpoint
+  - In News API, [services/news-api/src/index.js](services/news-api/src/index.js) exposes `/api/admin/ping` which requires realm role `news:admin`.
 
-## 1.5.4 MFA + step-up (OPTIONAL, NICE-TO-HAVE)
+Configured via script:
+- Run [tools/configure-phase1-5.sh](tools/configure-phase1-5.sh) to set `trustEmail=true`, bind First Login Flow `review profile`, add an IdP email mapper, and create realm role `news:admin` in `news`.
+
+
+---
+
+# PHASE 1.6 — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)
+
+## 1.6.1 MFA + step-up
 - Enable OTP in `portal`
 - Optionally require it only for admin users
 
-## 1.5.5 Self-service lifecycle (OPTIONAL, NICE-TO-HAVE)
+## 1.6.2 Self-service lifecycle
 - Forgot password
 - Email verification
 - Required actions (update profile)
@@ -247,7 +256,7 @@ Replace OIDC broker with SAML while keeping behavior identical.
 - Revisit NEWS UI:
   - No login prompt
   
-✅ news → portal login → back to news, no prompt on revisit
+news → portal login → back to news, no prompt on revisit
 
 ---
 
@@ -270,63 +279,6 @@ Make sure SAML behaves like OIDC did (and learn what differs).
 
 ---
 
-# PHASE 3 — SOCIAL LOGIN (PORTAL REALM)
-## Goal
-Aggregate social IdPs in `portal`, then broker users into `news` exactly as before.
-
----
-
-## 10. ADD SOCIAL IDENTITY PROVIDER TO PORTAL (REQUIRED)
-Pick **one** to start (GitHub easiest; Google also common).
-
-- Realm: `portal`
-- Identity Providers → Add (GitHub / Google / etc.)
-- Register Keycloak redirect URI with the provider
-- Request scopes that return **email**
-- Map:
-  - email
-  - firstName
-  - lastName
-
----
-
-## 11. ACCOUNT LINKING RULES FOR SOCIAL (REQUIRED)
-- Decide linking strategy:
-  - link by verified email (typical CIAM)
-- Keep First Login Flow: `review profile`
-
-✅ Test:
-- Local user + social user with same email
-- Confirm expected linking behavior
-
----
-
-## 12. END-TO-END SOCIAL → SAML TEST (REQUIRED)
-- Visit NEWS UI
-- Redirect to PORTAL
-- Choose social login
-- Authenticate at provider
-- Return to NEWS UI
-- NEWS realm issues access token
-
-✅ Social → Portal → SAML → News confirmed
-
----
-
-## OPTIONAL SOCIAL HARDENING (NICE-TO-HAVE)
-- Domain allowlist (B2B-style)
-- Disable local registration, keep social-only
-- Require MFA after social login for privileged roles
-
----
-
-## EXPECTED GOTCHAS (NORMAL)
-- Some providers don’t return email without extra scopes
-- Email may be unverified (provider-dependent)
-- Logout across social + brokered SAML can be inconsistent
-
----
-
 ## SUCCESS CHECKLIST
 - [ ] News auto-redirects to portal (optional)
 - [ ] Single login works across reloads
@@ -334,4 +286,4 @@ Pick **one** to start (GitHub easiest; Google also common).
 - [ ] News realm issues its own access token and API validates it
 - [ ] Roles/scopes enforced on at least one API endpoint
 - [ ] SAML broker flow works end-to-end
-- [ ] Social login works through portal into news
+

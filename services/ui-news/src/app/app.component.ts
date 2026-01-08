@@ -17,10 +17,19 @@ import { CommonModule } from '@angular/common';
       <p>
         <button (click)="validateToken()" [disabled]="!accessToken">Validate Token</button>
         <button (click)="fetchRss()" [disabled]="!accessToken">Fetch RSS</button>
+        <button (click)="toggleToken()" [disabled]="!accessToken">{{ showToken ? 'Hide' : 'Show' }} Token</button>
+        <button (click)="copyToken()" [disabled]="!accessToken">Copy Token</button>
+        <button (click)="adminPing()" [disabled]="!accessToken">Admin Ping</button>
       </p>
       <p *ngIf="accessTokenExp">
         Token expires at: {{ accessTokenExp * 1000 | date:'medium' }}
       </p>
+      <div *ngIf="showToken && accessToken">
+        <h3>Access Token (debug)</h3>
+        <textarea rows="6" style="width:100%;font-family:monospace" readonly>{{ accessToken }}</textarea>
+        <h4>Decoded Claims</h4>
+        <pre>{{ tokenPayload | json }}</pre>
+      </div>
       <div *ngIf="tokenValidation">
         <h3>Token Validation</h3>
         <pre>{{ tokenValidation | json }}</pre>
@@ -28,6 +37,11 @@ import { CommonModule } from '@angular/common';
       <div *ngIf="rss">
         <h3>RSS (via API)</h3>
         <pre>{{ rss | json }}</pre>
+      </div>
+      <div *ngIf="adminPingStatus !== null">
+        <h3>Admin Ping</h3>
+        <p>Status: {{ adminPingStatus }}</p>
+        <pre>{{ adminPingResponse | json }}</pre>
       </div>
     </div>
     <div *ngIf="error" class="error">{{ error }}</div>
@@ -38,10 +52,14 @@ export class AppComponent {
   loggedIn = false;
   accessToken: string | null = null;
   accessTokenExp: number | null = null;
+  tokenPayload: any = null;
   tokenTimer: any = null;
   tokenValidation: any = null;
   rss: any = null;
+  adminPingStatus: number | null = null;
+  adminPingResponse: any = null;
   error: string = '';
+  showToken = false;
   private realm = 'news';
   private kcBase = 'https://localhost:8443';
   private clientId = 'news-web';
@@ -64,6 +82,8 @@ export class AppComponent {
       if (stored) {
         this.loggedIn = true;
         this.accessToken = stored;
+        this.accessTokenExp = this.decodeJwtExp(this.accessToken);
+        this.tokenPayload = this.decodeJwt(this.accessToken);
       }
     }
   }
@@ -77,7 +97,7 @@ export class AppComponent {
     const url = `${this.kcBase}/realms/${this.realm}/protocol/openid-connect/auth` +
       `?client_id=${encodeURIComponent(this.clientId)}` +
       `&redirect_uri=${encodeURIComponent(this.redirectUri)}` +
-      `&response_type=code&scope=openid` +
+      `&response_type=code&scope=${encodeURIComponent('openid profile email')}` +
       `&code_challenge_method=S256&code_challenge=${encodeURIComponent(codeChallenge)}`;
     window.location.href = url;
   }
@@ -118,6 +138,27 @@ export class AppComponent {
       this.rss = await resp.json();
     } catch (e) {
       this.error = 'RSS failed: ' + String(e);
+    }
+  }
+
+  async adminPing() {
+    this.error = '';
+    this.adminPingStatus = null;
+    this.adminPingResponse = null;
+    if (!this.accessToken) return;
+    try {
+      const resp = await fetch('/api/admin/ping', {
+        headers: { 'Authorization': `Bearer ${this.accessToken}` }
+      });
+      this.adminPingStatus = resp.status;
+      // Try JSON first, fall back to text
+      try {
+        this.adminPingResponse = await resp.json();
+      } catch (_) {
+        this.adminPingResponse = await resp.text();
+      }
+    } catch (e) {
+      this.error = 'Admin ping failed: ' + String(e);
     }
   }
 
@@ -169,6 +210,7 @@ export class AppComponent {
     this.accessToken = json.access_token || null;
     this.loggedIn = !!this.accessToken;
     this.accessTokenExp = this.decodeJwtExp(this.accessToken);
+    this.tokenPayload = this.decodeJwt(this.accessToken);
     this.startTokenExpiryWatcher();
     try {
       if (this.accessToken) sessionStorage.setItem(this.tokenKey(), this.accessToken);
@@ -184,6 +226,28 @@ export class AppComponent {
       return typeof payload.exp === 'number' ? payload.exp : null;
     } catch {
       return null;
+    }
+  }
+
+  private decodeJwt(token: string | null): any {
+    if (!token) return null;
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  toggleToken() { this.showToken = !this.showToken; }
+  async copyToken() {
+    if (!this.accessToken) return;
+    try {
+      await navigator.clipboard.writeText(this.accessToken);
+    } catch (e) {
+      this.error = 'Copy failed: ' + String(e);
     }
   }
 
