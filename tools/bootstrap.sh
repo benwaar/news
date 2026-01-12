@@ -13,6 +13,20 @@ REPO_ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 COMPOSE_FILE="$REPO_ROOT/infra/docker-compose.yml"
 CERT_DIR="$REPO_ROOT/infra/keycloak/certs"
 HOST_KC_PORT=8081
+NO_CONFIG=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-config)
+      NO_CONFIG=true
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      echo "Usage: zsh tools/bootstrap.sh [--no-config]"
+      exit 2
+      ;;
+  esac
+done
 
 function ensure_mkcert() {
   if ! command -v mkcert >/dev/null 2>&1; then
@@ -90,8 +104,8 @@ function ensure_db() {
 }
 
 function up_rest() {
-  echo "[bootstrap] Starting API, RSS MCP, and both UIs ..."
-  docker compose -f "$COMPOSE_FILE" up -d --build news-api rss-mcp ui-news ui-portal
+  echo "[bootstrap] Starting API, RSS MCP, UIs, and Mailpit ..."
+  docker compose -f "$COMPOSE_FILE" up -d --build news-api rss-mcp ui-news ui-portal mailpit
 }
 
 function run_health() {
@@ -108,8 +122,12 @@ ensure_mkcert
 ensure_keycloak_certs
 up_core
 wait_keycloak
-configure_realm
-ensure_db
+if [[ "$NO_CONFIG" == false ]]; then
+  configure_realm
+  ensure_db
+else
+  echo "[bootstrap] Skipping realm & DB configuration (--no-config)."
+fi
 up_rest
 # Short delay to let TLS endpoints settle before health checks (always wait 12s)
 echo "[bootstrap] Waiting 12s before health checks ..."

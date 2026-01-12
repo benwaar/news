@@ -1,4 +1,12 @@
 services:
+  mailpit:
+    container_name: infra-mailpit-dev
+    image: ghcr.io/axllent/mailpit:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    restart: unless-stopped
+
   keycloak:
     container_name: infra-keycloak-dev
     build: ./keycloak

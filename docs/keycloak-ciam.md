@@ -248,14 +248,24 @@ Manual steps parity (if configuring in the console):
 
 # PHASE 1.6 — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)
 
-## 1.6.1 MFA + step-up
-- Enable OTP in `portal`
-- Optionally require it only for admin users
+Starting again from Phase 1
 
-## 1.6.2 Self-service lifecycle
-- Forgot password
-- Email verification
-- Required actions (update profile)
+## 1.6.1 Self-service lifecycle
+- SMTP (dev): Mailpit configured for outbound email in `portal`.
+- Login with email: Enabled (`loginWithEmailAllowed=true`) in `portal` (test user created).
+- Forgot password: Enabled (`resetPasswordAllowed=true`) in `portal`.
+- Email verification: Not enabled (optional).
+- Required actions (update profile): Not enabled (optional).
+
+Configured via script:
+- [tools/configure-phase1.6a-enable-email.sh](tools/configure-phase1.6a-enable-email.sh) — set SMTP (Mailpit) for target realms.
+- [tools/configure-phase1.6b-login-with-email.sh](tools/configure-phase1.6b-login-with-email.sh) — enable login with email; optional `--create-test-user`.
+- [tools/configure-phase1.6c-reset-password.sh](tools/configure-phase1.6c-reset-password.sh) — enable self-service reset password.
+
+## 1.6.2 MFA + step-up (NEXT)
+- OTP policy is present in `portal`, but not enforced yet.
+- Next: enable OTP and optionally scope enforcement to admin users.
+
 
 ---
 

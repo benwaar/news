@@ -9,6 +9,7 @@ UI_NEWS="https://localhost/"
 UI_PORTAL="https://localhost:4443/"
 NEWS_API="http://localhost:9000/healthz"
 RSS_MCP="http://localhost:9002/healthz"
+MAILPIT_UI="http://localhost:8025/"
 
 PASS=0
 FAIL=0
@@ -55,6 +56,7 @@ check "UI: news" "$UI_NEWS"
 check "UI: portal" "$UI_PORTAL"
 check "news-api /healthz" "$NEWS_API"
 check "rss-mcp /healthz" "$RSS_MCP"
+check "mailpit UI" "$MAILPIT_UI"
 
 section "Summary"
 log "Passed: ${PASS}  Failed: ${FAIL}"
