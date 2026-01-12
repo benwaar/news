@@ -17,6 +17,14 @@ services:
       - "8443:8443"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
+    healthcheck:
+      # Readiness via HTTP on 8080 without external tools (bash /dev/tcp)
+      test: "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /realms/news/.well-known/openid-configuration HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \"200\"'"
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    restart: unless-stopped
 
   db:
     container_name: infra-db-dev
@@ -35,6 +43,7 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+    restart: unless-stopped
 
 
   news-api:
@@ -45,8 +54,10 @@ services:
     ports:
       - "9000:9000"
     depends_on:
-      - db
-      - keycloak
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     restart: unless-stopped
 
   rss-mcp:
@@ -67,9 +78,12 @@ services:
     volumes:
       - ../services/ui-news/certs:/etc/nginx/certs:ro
     depends_on:
-      - keycloak
-      - news-api
-      - rss-mcp
+      keycloak:
+        condition: service_healthy
+      news-api:
+        condition: service_started
+      rss-mcp:
+        condition: service_started
     restart: unless-stopped
 
   ui-portal:
@@ -81,9 +95,12 @@ services:
     volumes:
       - ../services/ui-portal/certs:/etc/nginx/certs:ro
     depends_on:
-      - keycloak
-      - news-api
-      - rss-mcp
+      keycloak:
+        condition: service_healthy
+      news-api:
+        condition: service_started
+      rss-mcp:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
