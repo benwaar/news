@@ -60,7 +60,8 @@
       "lastName": "User",
       "credentials": [
         {"type": "password", "value": "news", "temporary": false}
-      ]
+      ],
+      "realmRoles": ["default-roles-news"]
     }
   ]
 }

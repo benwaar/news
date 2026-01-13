@@ -51,7 +51,7 @@
       "credentials": [
         {"type": "password", "value": "portal", "temporary": false}
       ],
-      "realmRoles": ["viewer"]
+      "realmRoles": ["viewer", "default-roles-portal"]
     }
   ]
 }

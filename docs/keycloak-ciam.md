@@ -60,8 +60,16 @@ Note: bootstrap intentionally does not run Phase 1/1.5; execute them as above.
 - Make sure you are using HTTPS: https://localhost:8443/realms/portal/account
 - Quick fix (recommended): run [tools/fix-account-console-spinner.sh](tools/fix-account-console-spinner.sh)
 
+```bash
+bash tools/fix-account-console-spinner.sh
+```
 
-This is safe for local dev and allows the console to derive origins from its base URL.
+What the fixer does (minimal):
+- Ensures `account-console` access tokens include `aud=account` by adding an OIDC audience mapper.
+
+Notes:
+- Seed users already include `default-roles-portal`/`default-roles-news`, which grant Account Console permissions.
+- No origin/redirect/URL relaxations are applied; those are unnecessary for the validated fix path.
 
 ---
 
@@ -384,6 +392,19 @@ Make sure SAML behaves like OIDC did (and learn what differs).
 - Authorization: API reads realm roles from `realm_access.roles`; endpoint `/api/admin/ping` requires realm role `news:admin`.
 - Front-channel vs back-channel: Browser redirects/login happen over HTTPS; scripts use internal HTTP for token endpoints only during IdP setup. The API never calls token endpoints—only JWKS for signature verification.
 - Common failures: unknown `kid` (stale JWKS cache), wrong `iss`/`aud`, expired token, or missing required role.
+
+
+### Quick Flow Explanation for Account SPA in Keycloak
+
+1) The browser client completes the OIDC code flow and receives an `access_token` for its client (e.g., `news-web` or `account-console`).
+2) The client calls a protected API with `Authorization: Bearer <access_token>`.
+3) The API fetches the realm JWKS, verifies the JWT signature and checks:
+  - `iss` matches the realm URL, `exp` not expired
+  - `aud` contains the API’s identifier (e.g., `news-api` or `account`)
+  - required roles/scopes are present (e.g., realm role `news:admin`)
+4) If all checks pass, the API returns 200; otherwise it rejects with 401/403.
+
+In Keycloak’s Account Console (SPA), the UI obtains a token as `account-console` but then calls the Account REST API (`account`). That API authorizes by audience, so without `aud=account` those calls fail (spinner with 401/403). The audience mapper adds `account` to `aud`, making the token valid for the API and eliminating the spinner.
 
 ---
 
