@@ -8,9 +8,10 @@ Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC &
 ### Topics / Keywords
 Identity UX, Authentication UX, Secure UX, CIAM, SSO  
 OIDC, OAuth2, PKCE, SAML, Federation  
-MFA, Account Linking, Social Login  
-Frontend Security, AppSec, Web Security  
-Keycloak, Identity Integrations
+MFA, WebAuthn, Passkeys, Passwordless, Step-up  
+Account Linking, Social Login, Role-based Auth  
+SPA Security, Audience (aud), JWT, JWKS  
+Keycloak, Quarkus, Docker Compose
 
 ## Phase 1: OIDC Brokering → Phase 2: SAML Brokering
 
@@ -296,6 +297,43 @@ Configured via script:
 
 
 ---
+
+## 1.6.3 WebAuthn (MFA/Passwordless) — Dev Simulation
+
+- What: Use WebAuthn with platform authenticators (Touch ID/Windows Hello) or a virtual key for local testing.
+- Configure (script):
+
+```bash
+bash tools/configure-phase1.6e-webauthn.sh
+```
+
+- Enroll a key: Open the Account Console → Security → Signing In → Register Security Key.
+- Simulate a key (Chrome):
+  - Open DevTools → More tools → WebAuthn → Enable virtual authenticator environment
+  - Add Virtual Authenticator (Platform or Cross-platform), User verification = required/preferred
+  - Register/Authenticate in the Account Console; the virtual key will satisfy prompts
+  - If you don’t see “Register Security Key”, enable the virtual authenticator and reload, or rerun the script (it now allows both platform/cross‑platform by setting attachment to “not specified”).
+
+### 1.6.4 WebAuthn Passwordless — Browser Flow
+
+- Switch Browser flow to passwordless (RP ID must be `localhost` as configured earlier):
+
+```bash
+bash tools/configure-phase1.6f-webauthn-passwordless.sh
+```
+
+- Test:
+  - Log out and start a new session in Chrome at https://localhost:8443/realms/portal/account
+  - The login screen will prompt for a passkey; use your registered platform/cross‑platform key or the virtual authenticator.
+- Revert:
+  - Restore the default Browser flow:
+
+```bash
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh update realms/portal -s browserFlow=browser
+```
+
+
 
 # PHASE 2 — SWITCH BROKER TO SAML (REQUIRED)
 ## Goal
