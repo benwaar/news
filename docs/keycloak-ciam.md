@@ -50,9 +50,29 @@ bash tools/configure-phase1-5.sh
 - Admin: https://localhost:8443/admin (admin/admin)
 - News UI: https://localhost (expect portal login or auto-redirect)
 - Portal UI: https://localhost:4443
+- Portal Account Console: https://localhost:8443/realms/portal/account (Security → Authenticator)
 - API health: http://localhost:9000/healthz | RSS: http://localhost:9002/healthz
 
 Note: bootstrap intentionally does not run Phase 1/1.5; execute them as above.
+
+### Troubleshooting: Account Console spinner (dev)
+- Use a fresh private window and ensure you trust the local CA cert.
+- Make sure you are using HTTPS: https://localhost:8443/realms/portal/account
+- Quick fix (recommended): run [tools/fix-account-console-spinner.sh](tools/fix-account-console-spinner.sh)
+- Manual alternative: relax web origins for dev on the built-in `account` and `account-console` clients in realm `portal`:
+
+```bash
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh config credentials \
+  --server http://localhost:8080 --realm master --user admin --password admin
+
+ACC_CONSOLE_ID=$(docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get clients -r portal -q clientId=account-console | jq -r '.[0].id')
+ACC_ID=$(docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get clients -r portal -q clientId=account | jq -r '.[0].id')
+
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh update clients/$ACC_CONSOLE_ID -r portal -s 'webOrigins=["+"]'
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh update clients/$ACC_ID -r portal -s 'webOrigins=["+"]'
+```
+
+This is safe for local dev and allows the console to derive origins from its base URL.
 
 ---
 
@@ -246,7 +266,7 @@ Manual steps parity (if configuring in the console):
 
 ---
 
-# PHASE 1.6 — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)
+# PHASE 1.6 ✅ — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)
 
 Starting again from Phase 1
 
@@ -262,9 +282,20 @@ Configured via script:
 - [tools/configure-phase1.6b-login-with-email.sh](tools/configure-phase1.6b-login-with-email.sh) — enable login with email; optional `--create-test-user`.
 - [tools/configure-phase1.6c-reset-password.sh](tools/configure-phase1.6c-reset-password.sh) — enable self-service reset password.
 
-## 1.6.2 MFA + step-up (NEXT)
-- OTP policy is present in `portal`, but not enforced yet.
-- Next: enable OTP and optionally scope enforcement to admin users.
+## 1.6.2 MFA + step-up 
+- OTP policy is present in `portal`.
+- Enable OTP and optionally scope enforcement to admin users.
+
+Configured via script:
+- [tools/configure-phase1.6d-mfa-stepup.sh](tools/configure-phase1.6d-mfa-stepup.sh) — enable OTP policy and enforcement
+  - Enforce all users: `bash tools/configure-phase1.6d-mfa-stepup.sh` (sets default required action CONFIGURE_TOTP for everyone)
+  - Admin-only step-up: `bash tools/configure-phase1.6d-mfa-stepup.sh --admin-only` (keeps default action off; leverages existing Conditional OTP so only targeted users are challenged)
+  - Custom role: `bash tools/configure-phase1.6d-mfa-stepup.sh --role <realm-role>`
+  - Seed existing users (role mode): add `--seed-existing` to mark users with the role to configure OTP at next login
+- Optional helper (quick test):
+  - [tools/grant-portal-admin.sh](tools/grant-portal-admin.sh) — grant `admin` to `portal` user, then seed:
+    - `bash tools/grant-portal-admin.sh`
+    - `bash tools/configure-phase1.6d-mfa-stepup.sh --admin-only --seed-existing`
 
 
 ---

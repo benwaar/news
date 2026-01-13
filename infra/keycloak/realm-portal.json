@@ -42,6 +42,7 @@
   "users": [
     {
       "username": "portal",
+      "createdTimestamp": 1768281600000,
       "enabled": true,
       "emailVerified": true,
       "email": "portal@example.com",

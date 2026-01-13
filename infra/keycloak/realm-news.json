@@ -52,6 +52,7 @@
   "users": [
     {
       "username": "news",
+      "createdTimestamp": 1768281600000,
       "enabled": true,
       "emailVerified": true,
       "email": "news@example.com",
