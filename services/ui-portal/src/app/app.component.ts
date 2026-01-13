@@ -14,12 +14,9 @@ import { CommonModule } from '@angular/common';
     <div *ngIf="loggedIn" style="margin: 8px 0;">
       <a [href]="accountUrl" target="_blank" rel="noopener noreferrer">Open Account Console</a>
     </div>
-    <p>API health via UI proxy:</p>
-    <pre>{{ health | json }}</pre>
   `
 })
 export class AppComponent {
-  health: any = { loading: true };
   loggedIn = false;
   private realm = 'portal';
   private kcBase = 'https://localhost:8443';
@@ -27,7 +24,6 @@ export class AppComponent {
   private redirectUri = 'https://localhost:4443/';
   accountUrl = `${this.kcBase}/realms/${this.realm}/account`;
   constructor(){
-    fetch('/api/healthz').then(r => r.json()).then(j => this.health = j).catch(e => this.health = { error: String(e) });
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (code) {
