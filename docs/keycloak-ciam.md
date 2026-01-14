@@ -333,7 +333,7 @@ docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh config credentials --s
 docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh update realms/portal -s browserFlow=browser
 ```
 
-# PHASE 2 — SWITCH BROKER TO SAML (REQUIRED)
+# PHASE 2 — ✅ SWITCH BROKER TO SAML
 ## Goal
 Replace OIDC broker with SAML while keeping behavior identical.
 
@@ -392,20 +392,50 @@ news → portal login → back to news, no prompt on revisit
 
 ---
 
-# PHASE 2.5 — SAML HARDENING + PARITY CHECKS
+# PHASE 2.5 — ✅ SSO (SAML) USABILITY
+
+---
+
+### Scripted Setup (Recommended)
+- Add IdP claim in tokens: run [tools/configure-phase2.5-token-idp-claim.sh](tools/configure-phase2.5-token-idp-claim.sh).
+  - Adds an OIDC session-note mapper so `access_token` and `id_token` include claim `idp` containing the IdP alias (e.g., `portal-saml` for SAML or `portal-oidc` for OIDC).
+- Enable realm events: run [tools/configure-phase2.5-events.sh](tools/configure-phase2.5-events.sh).
+  - Enables `eventsEnabled=true` and limits to `LOGIN`/`LOGOUT` for quick audit/testing in both `news` and `portal` realms.
+
+### Verify — Token Claim Path
+- Login to News via either flow; inspect the token (UI or API).
+- Expect `idp` claim in `access_token` and `id_token`:
+  - SAML: `idp = portal-saml`
+  - OIDC: `idp = portal-oidc`
+- Tips:
+  - News UI decodes the token client-side; check the visible fields after login.
+  - API helper: run `bash tools/test-news-api.sh` and inspect the token payload printed by the helper script.
+
+### Verify — Events Path
+- Perform a login and logout in News/Portal.
+- Fetch recent events (example):
+  - `docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get events -r news | jq -r '.[] | select(.type=="LOGIN" or .type=="LOGOUT") | {time,type,details}'`
+- Expect `details.identity_provider` to reflect the alias used and the usual broker details.
+
+### Notes
+- Both flows remain visible: the News realm Browser Flow should stay `browser` (no auto-redirect).
+- For production parity, enable signature validation once keys are aligned: set Want AuthnRequests Signed/Validate Signatures accordingly on IdP/client, and remove dev relaxations when appropriate.
+
+
+# PHASE 2.6 — SAML HARDENING + PARITY CHECKS
 ## Goal
 Make sure SAML behaves like OIDC did (and learn what differs).
 
-## 2.5.1 Attribute mapping parity (REQUIRED)
+## 2.6.1 Attribute mapping parity (REQUIRED)
 - Email + names mapped correctly
 - Same user reused
 
-## 2.5.2 Signing & validation tightening (OPTIONAL, NICE-TO-HAVE)
+## 2.6.2 Signing & validation tightening (OPTIONAL, NICE-TO-HAVE)
 - Sign AuthnRequests
 - Require client signatures
 - Intentionally break certs and observe errors
 
-## 2.5.3 Logout behavior learning (OPTIONAL, NICE-TO-HAVE)
+## 2.6.3 Logout behavior learning (OPTIONAL, NICE-TO-HAVE)
 - Test logout flows
 - Document what propagates and what doesn’t
 

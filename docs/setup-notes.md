@@ -336,6 +336,53 @@ Implementation notes:
 - Theme resources must be under `resources/` within each theme folder (e.g., CSS at [infra/keycloak/themes/news/resources/css/news.css](infra/keycloak/themes/news/resources/css/news.css)).
 - Realms are auto-imported from [infra/keycloak/Dockerfile](infra/keycloak/Dockerfile) via `start-dev --import-realm` in compose.
 
+### Keycloak CLI Tips (jq + docker exec)
+
+When scripting Keycloak admin with `kcadm.sh`, prefer running `jq` on the host and piping JSON out of the container. The Keycloak container image does not include `jq` by default.
+
+- Symptom: `jq: command not found` (inside the container)
+- Cause: the container lacks `jq`
+- Fix: run `jq` on the host; only run `kcadm.sh` in the container
+
+Good pattern (host jq):
+
+```bash
+# Get client id of news-web
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get clients -r news -q clientId=news-web \
+  | jq -r '.[0].id'
+
+# List OIDC protocol mappers (selected fields)
+CID=$(docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get clients -r news -q clientId=news-web | jq -r '.[0].id')
+docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh get clients/$CID/protocol-mappers/models -r news \
+  | jq -r '.[] | select(.protocol=="openid-connect") | [.name, .protocolMapper] | @tsv'
+```
+
+Avoid (container jq):
+
+```bash
+# Avoid relying on jq inside the container
+docker exec infra-keycloak-dev bash -lc '/opt/keycloak/bin/kcadm.sh get clients -r news | jq -r ...'  # <- will fail
+```
+
+Also, when calling Keycloak admin/token endpoints from scripts, prefer HTTPS with dev certs and follow redirects, then hand off to `jq`:
+
+```bash
+ACCESS_TOKEN=$(curl -sS -k -L https://localhost:8443/realms/master/protocol/openid-connect/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
+  | jq -r '.access_token')
+echo "token length: ${#ACCESS_TOKEN}"
+```
+
+Validate responses before piping to `jq` to catch non-JSON (e.g., HTML redirects):
+
+```bash
+RESP=$(curl -sS -k -L https://localhost:8443/realms/master/protocol/openid-connect/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'grant_type=password&client_id=admin-cli&username=admin&password=admin')
+printf '%s\n' "$RESP" | jq -e . >/dev/null || { echo "Not JSON:"; printf '%s\n' "$RESP" | head -n 5; }
+```
+
 
 ## Pyenv (manage multiple versions of Python)
 
