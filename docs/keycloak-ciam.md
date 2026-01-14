@@ -398,6 +398,30 @@ news → portal login → back to news, no prompt on revisit
 
 ### Scripted Setup (Recommended)
 - Add IdP claim in tokens: run [tools/configure-phase2.5-token-idp-claim.sh](tools/configure-phase2.5-token-idp-claim.sh).
+
+### Problems & Solutions (Scripting Phase 2.5)
+- Problem: Client-scope not created via partialImport
+  - Why: Partial import sometimes ignored a new `clientScopes` entry when no explicit id was provided or when the server returned 200 with no material changes.
+  - Fix: Add a fallback path to create the scope with `kcadm` when missing, then re-run partial import for idempotency. See [tools/configure-phase2.5-token-idp-claim-partial-import.sh](tools/configure-phase2.5-token-idp-claim-partial-import.sh).
+
+- Problem: Mapper not applied on scope
+  - Why: Nested `protocolMappers` in partial import did not always upsert; CLI `-s` quoting for mapper JSON is brittle; container lacks `jq`.
+  - Fix: Copy a small JSON file into the Keycloak container and create the mapper with `kcadm -f /tmp/kc-idp-mapper.json`. Provider id used: `oidc-usersessionmodel-note-mapper` with `user.session.note=identity_provider` → claim `idp`.
+
+- Problem: Direct admin endpoints returned 404
+  - Why: Hitting internal admin endpoints out of spec for mappers/scopes can 404 depending on path and version.
+  - Fix: Use the supported `partialImport` REST API for declarative updates, and fall back to `kcadm` for create/patch where needed.
+
+
+
+### Verify the IdP claim
+- Copy your access token to clipboard, then run:
+
+```bash
+tools/jwt-decode-payload.sh --clipboard --field idp --compact
+```
+
+Expected: `portal-saml` when logged in via the SAML IdP button.
   - Adds an OIDC session-note mapper so `access_token` and `id_token` include claim `idp` containing the IdP alias (e.g., `portal-saml` for SAML or `portal-oidc` for OIDC).
 - Enable realm events: run [tools/configure-phase2.5-events.sh](tools/configure-phase2.5-events.sh).
   - Enables `eventsEnabled=true` and limits to `LOGIN`/`LOGOUT` for quick audit/testing in both `news` and `portal` realms.
