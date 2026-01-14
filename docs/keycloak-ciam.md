@@ -333,13 +333,19 @@ docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh config credentials --s
 docker exec infra-keycloak-dev /opt/keycloak/bin/kcadm.sh update realms/portal -s browserFlow=browser
 ```
 
-
-
 # PHASE 2 — SWITCH BROKER TO SAML (REQUIRED)
 ## Goal
 Replace OIDC broker with SAML while keeping behavior identical.
 
 ---
+
+### Scripted Setup (Recommended)
+- Run [tools/configure-phase2-saml.sh](tools/configure-phase2-saml.sh) to configure Portal↔News SAML brokering end-to-end.
+- What it does:
+  - Portal realm: creates/updates a SAML client for News SP with Redirect URIs = News ACS, NameID Format = email, Sign Assertions = ON, and adds `email`, `firstName`, `lastName` mappers.
+  - News realm: creates/updates SAML IdP `portal-saml` (Trust Email = ON, First Login Flow = first broker login) and sets both POST/Redirect Single Logout URLs.
+  - SLO: configures Logout Service URLs on the Portal SAML client(s) to point to the News broker endpoint.
+- Show both flows: ensure the News realm’s Browser Flow is `browser` (no auto-redirect). If you previously enabled the redirector, revert it via Realm Settings → Login.
 
 ## 5. NEWS REALM — CREATE SAML IDP (SP METADATA) (REQUIRED)
 - Identity Providers → Add → SAML v2.0
@@ -372,12 +378,7 @@ Replace OIDC broker with SAML while keeping behavior identical.
 
 ---
 
-## 8. SWITCH REDIRECTOR TO SAML (REQUIRED IF USING REDIRECTOR)
-- Default IdP: `portal-saml`
-
----
-
-## 9. TEST SAML SSO (REQUIRED)
+## 8. TEST SAML SSO (REQUIRED)
 - New browser session
 - Visit NEWS UI
 - Expect:

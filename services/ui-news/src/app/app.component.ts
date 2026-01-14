@@ -14,6 +14,9 @@ import { CommonModule } from '@angular/common';
     <p>API health via UI proxy:</p>
     <pre>{{ health | json }}</pre>
     <div *ngIf="loggedIn">
+      <p style="margin: 8px 0;">
+        <a [href]="accountUrl" target="_blank" rel="noopener noreferrer">Open Account Console</a>
+      </p>
       <p>
         <button (click)="validateToken()" [disabled]="!accessToken">Validate Token</button>
         <button (click)="fetchRss()" [disabled]="!accessToken">Fetch RSS</button>
@@ -64,6 +67,7 @@ export class AppComponent {
   private kcBase = 'https://localhost:8443';
   private clientId = 'news-web';
   private redirectUri = 'https://localhost/';
+  accountUrl = `${this.kcBase}/realms/${this.realm}/account`;
 
   constructor(){
     fetch('/api/healthz').then(r => r.json()).then(j => this.health = j).catch(e => this.health = { error: String(e) });
