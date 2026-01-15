@@ -1,0 +1,50 @@
+<h1>News UI (Angular)</h1>
+<div class="spaced">
+  <label for="authMode">Auth Mode:&nbsp;</label>
+  <select id="authMode" (change)="onModeChange($event)">
+    <option *ngFor="let m of authModes" [selected]="m===authMode" [value]="m">{{ m }}</option>
+  </select>
+  <span *ngIf="authMode!=='plain'" style="margin-left:8px">(scaffolded; plain mode active)</span>
+  <span *ngIf="authMode==='plain'" style="margin-left:8px">(plain manual PKCE)</span>
+  </div>
+<div class="badge">Realm: <strong>news</strong>
+  <button (click)="login()" *ngIf="!loggedIn" [disabled]="authMode!=='plain'">Login</button>
+  <button (click)="logout()" *ngIf="loggedIn" [disabled]="authMode!=='plain'">Logout</button>
+</div>
+<p>API health via UI proxy:</p>
+<pre>{{ health | json }}</pre>
+<div *ngIf="loggedIn">
+  <p class="spaced">
+    <a [href]="accountUrl" target="_blank" rel="noopener noreferrer">Open Account Console</a>
+  </p>
+  <p>
+    <button (click)="validateToken()" [disabled]="!accessToken || authMode!=='plain'">Validate Token</button>
+    <button (click)="fetchRss()" [disabled]="!accessToken || authMode!=='plain'">Fetch RSS</button>
+    <button (click)="toggleToken()" [disabled]="!accessToken">{{ showToken ? 'Hide' : 'Show' }} Token</button>
+    <button (click)="copyToken()" [disabled]="!accessToken || authMode!=='plain'">Copy Token</button>
+    <button (click)="adminPing()" [disabled]="!accessToken || authMode!=='plain'">Admin Ping</button>
+  </p>
+  <p *ngIf="accessTokenExp">
+    Token expires at: {{ accessTokenExp * 1000 | date:'medium' }}
+  </p>
+  <div *ngIf="showToken && accessToken">
+    <h3>Access Token (debug)</h3>
+    <textarea rows="6" readonly>{{ accessToken }}</textarea>
+    <h4>Decoded Claims</h4>
+    <pre>{{ tokenPayload | json }}</pre>
+  </div>
+  <div *ngIf="tokenValidation">
+    <h3>Token Validation</h3>
+    <pre>{{ tokenValidation | json }}</pre>
+  </div>
+  <div *ngIf="rss">
+    <h3>RSS (via API)</h3>
+    <pre>{{ rss | json }}</pre>
+  </div>
+  <div *ngIf="adminPingStatus !== null">
+    <h3>Admin Ping</h3>
+    <p>Status: {{ adminPingStatus }}</p>
+    <pre>{{ adminPingResponse | json }}</pre>
+  </div>
+</div>
+<div *ngIf="error" class="error">{{ error }}</div>

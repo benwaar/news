@@ -524,25 +524,25 @@ In Keycloak’s Account Console (SPA), the UI obtains a token as `account-consol
 
 ## GLOSSARY
 
-- Identity Provider (IdP): The system that authenticates users and issues identities (e.g., realm `portal`).
-- Broker (Keycloak): A realm that delegates user login to an external IdP and then issues its own tokens (e.g., realm `news`).
-- Realm: A partitioned namespace in Keycloak containing users, clients, roles, and flows.
-- Client (OIDC): An application registered in a realm. Public clients (SPAs) use PKCE; confidential clients have a secret (e.g., `news-broker`).
-- Bearer-only client: API-style client that never performs browser login, only validates incoming bearer tokens (e.g., `news-api`).
-- Mapper (IdP): Transforms attributes from the external IdP into Keycloak user attributes on first login/link (e.g., map `email`, `preferred_username`).
-- Mapper (Protocol): Shapes claims in tokens issued to a specific client (add/rename/remove claims in `access_token`/`id_token`).
-- Browser Flow: Authentication flow executed for browser-based logins (e.g., `browser`, `browser-with-idp`).
-- Binding (Flow): Selecting which flow the realm uses for Browser login (Realm Settings → Login → Browser Flow).
-- Identity Provider Redirector: Authenticator step that forwards users directly to a chosen IdP (auto-redirect); configured with `defaultProvider`.
-- First Broker Login flow: Flow run on a user’s first brokered login; includes “Review Profile” and account linking.
-- Trust Email: Accept IdP-provided email as verified. Useful for dev; assess risk before enabling in prod.
-- Default Scope (OIDC): Scopes requested by default (e.g., `openid profile email`) which influence included claims.
-- OIDC: Modern auth protocol. Key terms: issuer (`iss`), audience (`aud`), scopes, claims, `access_token`, `id_token`, JWKS, PKCE.
-- SAML: XML-based federation protocol. Key terms: IdP, SP (service provider), Entity ID, ACS URL, Assertions, NameID, Attributes, Metadata.
-- JWKS: JSON Web Key Set used to publish signing keys so clients can verify token signatures.
-- JWT: JSON Web Token carrying signed claims; header has `alg`/`kid`, body includes claims like `iss`, `aud`, `exp`; verified with issuer’s public key from JWKS (e.g., RS256).
-- PKCE: Proof Key for Code Exchange; protects public clients (SPAs) during the OAuth2/OIDC code flow.
-- Role (Realm vs Client): Realm roles apply across the realm (e.g., `news:admin`); client roles apply only to a specific client.
-- Audience (`aud`): Intended recipient(s) of a token (e.g., `news-api`). APIs should verify audience.
-- Issuer (`iss`): The URL identifying the token’s issuing realm (e.g., `https://localhost:8443/realms/news`).
+ - Audience (`aud`): Intended recipient(s) of a token (e.g., `news-api`). APIs should verify audience.
+ - Bearer-only client: API-style client that never performs browser login, only validates incoming bearer tokens (e.g., `news-api`).
+ - Binding (Flow): Selecting which flow the realm uses for Browser login (Realm Settings → Login → Browser Flow).
+ - Browser Flow: Authentication flow executed for browser-based logins (e.g., `browser`, `browser-with-idp`).
+ - Broker (Keycloak): A realm that delegates user login to an external IdP and then issues its own tokens (e.g., realm `news`).
+ - Client (OIDC): An application registered in a realm. Public clients (SPAs) use PKCE; confidential clients have a secret (e.g., `news-broker`).
+ - Default Scope (OIDC): Scopes requested by default (e.g., `openid profile email`) which influence included claims.
+ - First Broker Login flow: Flow run on a user’s first brokered login; includes “Review Profile” and account linking.
+ - Identity Provider (IdP): The system that authenticates users and issues identities (e.g., realm `portal`).
+ - Identity Provider Redirector: Authenticator step that forwards users directly to a chosen IdP (auto-redirect); configured with `defaultProvider`.
+ - Issuer (`iss`): The URL identifying the token’s issuing realm (e.g., `https://localhost:8443/realms/news`).
+ - JWKS: JSON Web Key Set used to publish signing keys so clients can verify token signatures.
+ - JWT: JSON Web Token carrying signed claims; header has `alg`/`kid`, body includes claims like `iss`, `aud`, `exp`; verified with issuer’s public key from JWKS (e.g., RS256).
+ - Mapper (IdP): Transforms attributes from the external IdP into Keycloak user attributes on first login/link (e.g., map `email`, `preferred_username`).
+ - Mapper (Protocol): Shapes claims in tokens issued to a specific client (add/rename/remove claims in `access_token`/`id_token`).
+ - OIDC: Modern auth protocol. Key terms: issuer (`iss`), audience (`aud`), scopes, claims, `access_token`, `id_token`, JWKS, PKCE.
+ - PKCE: Proof Key for Code Exchange; protects public clients (SPAs) during the OAuth2/OIDC code flow.
+ - Realm: A partitioned namespace in Keycloak containing users, clients, roles, and flows.
+ - Role (Realm vs Client): Realm roles apply across the realm (e.g., `news:admin`); client roles apply only to a specific client.
+ - SAML: XML-based federation protocol. Key terms: IdP, SP (service provider), Entity ID, ACS URL, Assertions, NameID, Attributes, Metadata.
+ - Trust Email: Accept IdP-provided email as verified. Useful for dev; assess risk before enabling in prod.
 

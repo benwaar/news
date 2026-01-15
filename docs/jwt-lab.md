@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [JWT Starter Lab — Browser Tokens (JS + Angular)](#jwt-starter-lab--browser-tokens-js--angular)
+  - [Table of Contents](#table-of-contents)
   - [Goal](#goal)
   - [Assumptions](#assumptions)
   - [Vocabulary (Fast)](#vocabulary-fast)
@@ -28,6 +29,7 @@
     - [Dev Checklist](#dev-checklist)
     - [Prod Checklist (Baseline)](#prod-checklist-baseline)
   - [Resources](#resources)
+  - [Glossary](#glossary)
 
 ---
 
@@ -37,6 +39,15 @@ Experiment with JWT access tokens in **browser apps** (plain JS + Angular):
 - Idle vs expiration behavior
 - Security properties and tradeoffs in real front-end code
 - Failure modes (multi-tab, race conditions, token replay, XSS)
+- libraries to experiment with
+  - **oidc-client-ts** 
+   Simplest way to learn the OIDC Code+PKCE principles
+  - **angular-auth-oidc-client**
+   Opinionated OIDC-first Angular library with higher-level services, guards, and built-in flows for modern Code+PKCE.
+   10.0.15 (ang 15) - 18 in 18
+  - **angular-oauth2-oidc**
+   Flexible, lower-level OAuth2/OIDC toolkit for Angular; you compose behavior with OAuthService and config.
+
 
 ---
 
@@ -310,4 +321,30 @@ Useful debugging patterns:
   - JWT Security Cheat Sheet
 - Angular HttpInterceptor docs
 - Your IdP docs (Keycloak: clients, mappers, token lifetimes, sessions)
+
+---
+
+## Glossary
+
+- Access token: Short-lived bearer token sent to APIs (e.g., `news-api`). Must validate signature, `iss`, `aud`, and `exp`.
+- Audience (`aud`): Intended recipient(s) of the token (e.g., `news-api`). APIs should reject tokens with wrong `aud`.
+- Backend-for-Frontend (BFF): Small server tailored to a SPA that owns OAuth/OIDC exchanges and refresh; keeps refresh tokens in HttpOnly+Secure+SameSite cookies and issues short-lived access tokens to the browser (or proxies calls server-side). Reduces XSS token theft risk.
+- BroadcastChannel: Browser API to sync auth state across tabs and coordinate refresh.
+- Clock skew: Time differences cause premature “expired” tokens; allow small tolerance.
+- CSRF: Relevant when relying on cookies; protect state-changing endpoints with CSRF tokens or SameSite settings.
+- HttpOnly cookie: Cookie not readable by JS; use for refresh token with `Secure` and `SameSite` configured correctly.
+- ID token: Identity assertion for the client (not for APIs); useful for profile and UI state.
+- In-memory storage: Keep access token only in memory for less persistence risk; expect token loss on reload.
+- Interceptor (Angular): Attaches `Authorization: Bearer ...` only to allowlisted API origins and coordinates 401→refresh→retry.
+- Issuer (`iss`): URL of the realm that issued the token (e.g., `https://localhost:8443/realms/news`).
+- JWKS: JSON Web Key Set published by the issuer; used to verify JWT signatures (e.g., Keycloak `/protocol/openid-connect/certs`).
+- JWT: JSON Web Token with header (`alg`,`kid`), payload (claims), and signature; verify with the issuer’s JWKS.
+- PKCE: Proof Key for Code Exchange; protects SPA code flow using `code_verifier`/`code_challenge` (S256).
+- Refresh token: Longer-lived credential used to obtain new access tokens; ideally stored in HttpOnly cookie by a BFF, not readable by JS.
+- Route Guard (Angular): Protects routes based on auth state and token expiration.
+- Silent re-auth (`prompt=none`): Re-auth in the background if IdP session is valid; requires proper IdP/config and careful iframe/CORS handling.
+- Single refresh in-flight: Guard to ensure only one refresh happens at a time; queue requests while refreshing.
+- SSO session: IdP session cookie; can enable silent re-auth even without a refresh token.
+- Token replay: Stolen access token reused until `exp`; mitigate with short lifetimes and server checks.
+
 

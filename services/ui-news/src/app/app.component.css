@@ -1,0 +1,12 @@
+.spaced {
+  margin: 8px 0;
+}
+
+textarea {
+  width: 100%;
+  font-family: monospace;
+}
+
+.error {
+  color: #b00020;
+}
