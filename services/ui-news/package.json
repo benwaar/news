@@ -4,7 +4,7 @@
   "private": true,
   "engines": { "node": ">=22" },
   "scripts": {
-    "start": "ng serve --host 0.0.0.0 --port 4200",
+    "start": "ng serve --ssl true --ssl-cert ./certs/localhost.pem --ssl-key ./certs/localhost-key.pem --host localhost --port 4200 --proxy-config ./proxy.conf.json",
     "build": "ng build",
     "lint": "eslint --ext .ts src"
   },

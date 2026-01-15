@@ -71,6 +71,14 @@ function configure_realm() {
   echo "[bootstrap] Configuring 'news' realm ..."
   "$REPO_ROOT"/tools/configure-realm.sh --force || true
 }
+function configure_ui_news_dev_redirects() {
+  echo "[bootstrap] Configuring UI-News dev redirects/origins (https://localhost:4200) ..."
+  if [[ -f "$REPO_ROOT/tools/configure-ui-news-dev-redirects.sh" ]]; then
+    bash "$REPO_ROOT"/tools/configure-ui-news-dev-redirects.sh || true
+  else
+    echo "[bootstrap] Skipping: tools/configure-ui-news-dev-redirects.sh not found"
+  fi
+}
 
 function configure_phase1() {
   echo "[bootstrap] Configuring Phase 1 (OIDC brokering) ..."
@@ -124,6 +132,7 @@ up_core
 wait_keycloak
 if [[ "$NO_CONFIG" == false ]]; then
   configure_realm
+  configure_ui_news_dev_redirects
   ensure_db
 else
   echo "[bootstrap] Skipping realm & DB configuration (--no-config)."

@@ -74,7 +74,12 @@ export class PlainAuthProvider implements AuthProvider {
     const resp = await fetch('/api/token/validate', {
       headers: { 'Authorization': `Bearer ${this.accessToken}` }
     });
-    return await resp.json();
+    const ct = resp.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      return await resp.json();
+    }
+    const text = await resp.text();
+    return { status: resp.status, contentType: ct, body: text };
   }
 
   async fetchRss(): Promise<any> {

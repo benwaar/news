@@ -1,4 +1,8 @@
 <h1>News UI (Angular)</h1>
+<!-- Env indicator and subtle dev background overlay -->
+<div class="env-indicator" [class.dev]="isDev" [class.prod]="!isDev">{{ envLabel }}</div>
+<div class="api-indicator">{{ apiLabel }}</div>
+<div class="dev-cascade" *ngIf="isDev"></div>
 <div class="spaced">
   <label for="authMode">Auth Mode:&nbsp;</label>
   <select id="authMode" (change)="onModeChange($event)">

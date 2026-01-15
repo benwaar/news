@@ -25,14 +25,24 @@ export class AppComponent {
   showToken = false;
   authMode: AuthMode = 'plain';
   authModes = AUTH_MODES;
+  // Environment indicator
+  isDev = false;
+  currentPort = '';
+  envLabel = '';
+  apiLabel = '';
   private provider!: AuthProvider;
   private realm = 'news';
   private kcBase = 'https://localhost:8443';
   private clientId = 'news-web';
-  private redirectUri = 'https://localhost/';
+  private redirectUri = window.location.origin;
   accountUrl = `${this.kcBase}/realms/${this.realm}/account`;
 
   constructor(){
+    // Determine environment by port (dev: 4200, prod: 80)
+    this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    this.isDev = this.currentPort === '4200';
+    this.envLabel = this.isDev ? `DEV (${this.currentPort})` : `PROD (${this.currentPort})`;
+    this.apiLabel = this.isDev ? 'API: localhost:9000' : 'API: via /api';
     fetch('/api/healthz').then(r => r.json()).then(j => this.health = j).catch(e => this.health = { error: String(e) });
     // Load selected auth mode (default 'plain')
     const savedMode = sessionStorage.getItem(AUTH_MODE_STORAGE_KEY) as AuthMode | null;

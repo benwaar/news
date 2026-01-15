@@ -1,4 +1,5 @@
 import { AuthMode } from './modes';
+import { PlainAuthProvider } from './plain.provider';
 
 export interface AuthConfig {
   realm: string;
@@ -29,10 +30,7 @@ export interface AuthProvider {
 export function createAuthProvider(mode: AuthMode): AuthProvider {
   switch (mode) {
     case 'plain':
-      // Lazy require to avoid circular deps
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Plain = require('./plain.provider');
-      return new Plain.PlainAuthProvider();
+      return new PlainAuthProvider();
     case 'oidc-client-ts':
     case 'angular-auth-oidc-client':
     case 'angular-oauth2-oidc':
