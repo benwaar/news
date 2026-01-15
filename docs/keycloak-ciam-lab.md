@@ -5,7 +5,47 @@ It focuses on how real users experience login, SSO, and federation flows — and
 
 Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC & SAML login patterns as they are commonly implemented in modern web applications, with an emphasis on **secure-by-design UX** rather than theory.
 
-### Topics / Keywords
+## Table of Contents
+
+- [Identity & Authentication UX - CIAM SSO Lab (Trying out Keycloak)](#identity--authentication-ux---ciam-sso-lab-trying-out-keycloak)
+  - [Topics / Keywords](#topics--keywords)
+  - [Phase 1: OIDC Brokering → Phase 2: SAML Brokering](#phase-1-oidc-brokering--phase-2-saml-brokering)
+  - [Assumptions](#assumptions)
+  - [Quick Start (Local)](#quick-start-local)
+    - [Troubleshooting: Account Console spinner (dev)](#troubleshooting-account-console-spinner-dev)
+  - [PHASE 0 ✅ — BASELINE](#phase-0--baseline)
+    - [0.1 Create OIDC clients for the UIs](#01-create-oidc-clients-for-the-uis)
+    - [0.2 API client + JWT validation](#02-api-client--jwt-validation)
+    - [0.3 Session & Storage Guidance](#03-session--storage-guidance-)
+  - [PHASE 1 ✅ — OIDC REALM-TO-REALM BROKERING (FAST PROOF)](#phase-1--oidc-realm-to-realm-brokering-fast-proof)
+    - [1. PORTAL REALM (acts as OIDC IdP)](#1-portal-realm-acts-as-oidc-idp)
+    - [2. NEWS REALM (acts as OIDC Broker)](#2-news-realm-acts-as-oidc-broker)
+    - [3. AUTO-REDIRECT (OPTIONAL, NICE-TO-HAVE)](#3-auto-redirect-optional-nice-to-have)
+    - [4. TEST OIDC SSO (REQUIRED)](#4-test-oidc-sso-required)
+    - [Scripts Cheat Sheet](#scripts-cheat-sheet)
+  - [PHASE 1.5 ✅ — CIAM “APP FUNDAMENTALS”](#phase-15--ciam-app-fundamentals)
+  - [PHASE 1.6 ✅ — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)](#phase-16--ciam-app-fundamentals-nice-to-have)
+    - [1.6.1 Self-service lifecycle](#161-self-service-lifecycle)
+    - [1.6.2 MFA + step-up](#162-mfa--step-up)
+    - [1.6.3 WebAuthn (MFA/Passwordless) — Dev Simulation](#163-webauthn-mfapasswordless--dev-simulation)
+    - [1.6.4 WebAuthn Passwordless — Browser Flow](#164-webauthn-passwordless--browser-flow)
+  - [PHASE 2 — ✅ SWITCH BROKER TO SAML](#phase-2----switch-broker-to-saml)
+    - [Scripted Setup (Recommended)](#scripted-setup-recommended)
+    - [5. NEWS REALM — CREATE SAML IDP (SP METADATA)](#5-news-realm--create-saml-idp-sp-metadata-required)
+    - [6. PORTAL REALM — CREATE SAML CLIENT (IdP SIDE)](#6-portal-realm--create-saml-client-idp-side-required)
+    - [7. NEWS REALM — IMPORT PORTAL METADATA](#7-news-realm--import-portal-metadata-required)
+    - [8. TEST SAML SSO (REQUIRED)](#8-test-saml-sso-required)
+  - [PHASE 2.5 — ✅ SSO (SAML) USABILITY](#phase-25--sso-saml-usability)
+    - [Verify the IdP claim](#verify-the-idp-claim)
+    - [Verify — Token Claim Path](#verify--token-claim-path)
+    - [Verify — Events Path](#verify--events-path)
+  - [Token Verification Flow (This Repo)](#token-verification-flow-this-repo)
+  - [RESOURCES](#resources)
+  - [GLOSSARY](#glossary)
+
+---
+
+## Topics / Keywords
 Identity UX, Authentication UX, Secure UX, CIAM, SSO  
 OIDC, OAuth2, PKCE, SAML, Federation  
 MFA, WebAuthn, Passkeys, Passwordless, Step-up  
@@ -444,34 +484,6 @@ Expected: `portal-saml` when logged in via the SAML IdP button.
 ### Notes
 - Both flows remain visible: the News realm Browser Flow should stay `browser` (no auto-redirect).
 - For production parity, enable signature validation once keys are aligned: set Want AuthnRequests Signed/Validate Signatures accordingly on IdP/client, and remove dev relaxations when appropriate.
-
-
-# PHASE 2.6 — SAML HARDENING + PARITY CHECKS
-## Goal
-Make sure SAML behaves like OIDC did (and learn what differs).
-
-## 2.6.1 Attribute mapping parity (REQUIRED)
-- Email + names mapped correctly
-- Same user reused
-
-## 2.6.2 Signing & validation tightening (OPTIONAL, NICE-TO-HAVE)
-- Sign AuthnRequests
-- Require client signatures
-- Intentionally break certs and observe errors
-
-## 2.6.3 Logout behavior learning (OPTIONAL, NICE-TO-HAVE)
-- Test logout flows
-- Document what propagates and what doesn’t
-
----
-
-## SUCCESS CHECKLIST
-- [ ] News auto-redirects to portal (optional)
-- [ ] Single login works across reloads
-- [ ] Same user reused (no duplicates)
-- [ ] News realm issues its own access token and API validates it
-- [ ] Roles/scopes enforced on at least one API endpoint
-- [ ] SAML broker flow works end-to-end
 
 ---
 

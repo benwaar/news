@@ -1,19 +1,14 @@
-# Project Plan — Local News Briefing Agent (MCP + Embeddings + Optional LLM)
+# Project Plan — Local lab - News Briefing Agent (MCP + Embeddings + Optional LLM)
 
-This project is a deliberate, local-first exploration of modern “agentic” system design without hype or hidden magic. The goal is to understand how agents are actually built by layering deterministic systems, MCP-based tool access (typed RPC), semantic memory via embeddings, and optional LLM-based judgment and synthesis. Each phase isolates one capability—state ownership, tool usage, retrieval, planning, and reasoning—so their roles and trade-offs are explicit, testable, and observable. The result is not just a news reader, but a practical reference implementation for building trustworthy, inspectable agents.
+This project is a deliberate, local-first lab exploration of modern “agentic” system design without hype or hidden magic. The goal is to understand how agents are actually built by layering deterministic systems, MCP-based tool access (typed RPC), semantic memory via embeddings, and optional LLM-based judgment and synthesis. Each phase isolates one capability—state ownership, tool usage, retrieval, planning, and reasoning—so their roles and trade-offs are explicit, testable, and observable. The result is not just a news reader, but a practical reference implementation for building trustworthy, inspectable agents.
 
-Goal: Build a local-first news briefing system that (1) ingests from RSS via MCP tools, (2) deduplicates and stores items, (3) ranks novelty against “what I know” using local embeddings, and (4) optionally uses an LLM/agent layer for synthesis.
+Goal: Cretae a local lab for security experiments. Then build a news briefing system that (1) ingests from RSS via MCP tools, (2) deduplicates and stores items, (3) ranks novelty against “what I know” using local embeddings, and (4) optionally uses an LLM/agent layer for synthesis.
 
 Non-goals (initially):
 - No paywalled scraping
 - No auto-posting to social platforms
 - No “autonomous” changes to notes without review
 - No reliance on cloud services by default
-
-Repository convention:
-- /news/ contains the application
-- /specs/news-brief/ contains the specs (Spec Kit style)
-
 
 ## KERNEL-Inspired “Vibe Coding” (Fluency Mode)
 
@@ -33,83 +28,14 @@ The goal is **language fluency and understanding**, not formal specification or 
 
 This is *interactive co-building*, not copy-pasting large solutions.
 
-### KERNEL principles retained (lightweight)
-
-Even in fluency mode, a few constraints are intentionally kept:
-
-#### 1. Small, inspectable steps
-- Each change should be runnable within minutes
-- No large, untested jumps
-- Prefer visible state (prints, logs, simple outputs)
-
-#### 2. Explicit authority
-- The program owns its state (files, SQLite)
-- Chat suggestions are advisory, not authoritative
-- The code on disk is the source of truth
-
-#### 3. Clear ownership boundaries
-- Separate concerns early (db / ingest / brief)
-- Avoid “god files” even while experimenting
-
-#### 4. Fast feedback over correctness
-- Errors are learning signals, not failures
-- Fix what breaks *now*, not what might break later
-
-
-### What is intentionally **not** enforced
-- No formal specs or acceptance gates
-- No locked behavior
-- No premature optimization
-- No obligation to keep early design decisions
-
-This is **fluency mode**, not contract mode.
-
-
-
-## Shared Language & Assumptions
-
-This project uses the terminology defined in:
-👉 [FOUNDATIONS](https://github.com/benwaar/shaders/blob/main/docs/FOUNDATIONS.md)
-
-In particular:
-- specs define behavior
-- plans are inspectable intermediates
-- execution is substrate-specific
-- authority is explicit
-- advisory systems do not own state
-
-Any probabilistic behavior is treated as advisory unless explicitly stated otherwise.
-
-## Spec Kit Artifacts
-
-/specs/news-brief/
-- spec.md  (contracts, invariants, definitions)
-- plan.md  (architecture, components, data flow)
-- tasks.md (implementation steps + acceptance checks)
-
-Definition of authority:
-- SQLite + files are the system of record
-- MCP tools are capabilities only (fetch/parse/scan), not stateful owners
-- LLM outputs are advisory and never authoritative
-
-
-## Phase 0 — Spec Baseline (core)
+## Phase 0 — Lab Baseline
 
 Deliverables:
 - [setup-notes.md](docs/setup-notes.md): setup a fresh local environment
-- [keycloak-ciam.md](docs/keycloak-ciam.md): Keycloak CIAM tests and setup notes
-- spec.md: definitions of “new”, “duplicate”, “novel”, output format, non-goals
-- plan.md: components + boundaries (FastAPI server, storage, MCP client, embeddings)
-- tasks.md: first implementation sequence
-- lint.md: baseline linting guidance and rules for services and UIs (JS/TS/Angular)
+- [keycloak-ciam-lab.md](docs/keycloak-ciam-lab.md): Keycloak CIAM tests and setup notes
+- [jwt-lab.md](docs/jwt-lab.md): JWT experiments
 
-
-Acceptance:
-- Specs exist and are readable
-- A change to behavior requires a spec change
-
-
-## Phase 1 — Deterministic Core (core)
+## Phase 1 — Deterministic Core
 
 Scope:
 - FastAPI server
@@ -129,7 +55,7 @@ Acceptance:
 - Works offline after ingest (reading DB only)
 
 
-## Phase 2 — MCP Integration (core learning)
+## Phase 2 — MCP Integration
 
 Scope:
 - Use an external/local RSS MCP server as a tool provider
@@ -146,7 +72,7 @@ Acceptance:
 - Logs show tool calls and failures clearly
 
 
-## Phase 3 — Embeddings “Memory” (core learning)
+## Phase 3 — Embeddings “Memory”
 
 Scope:
 - Local embedding model (no API key required)
@@ -168,7 +94,7 @@ Acceptance:
 - Results are reproducible given same model + data
 
 
-## Phase 4 — Agent Loop (no LLM required) (core learning)
+## Phase 4 — Agent Loop (no LLM required)
 
 Scope:
 - Add a simple “agent runner” that orchestrates:
@@ -213,12 +139,6 @@ Acceptance:
 Scope ideas (choose based on interest):
 - MCP security scanner tools (SAST/DAST) to enrich brief with “security-relevant” items
 - Source trust scoring and allow/deny lists
-- Email/Slack output
-- Scheduling (cron/systemd/GitHub Actions), not “agent autonomy”
-
-Acceptance:
-- Extensions don’t break determinism of the core pipeline
-- Failures degrade gracefully (best-effort enrichment)
 
 
 ## Summary
@@ -304,15 +224,3 @@ tools/drop.sh
 tools/bootstrap.sh
 ```
 
-### Linting
-
-- API: `npm run lint --prefix services/news-api`
-- RSS MCP: `npm run lint --prefix services/rss-mcp`
-- UI-News: `npm run lint --prefix services/ui-news`
-- UI-Portal: `npm run lint --prefix services/ui-portal`
-
-Notes:
-- Lint uses ESLint v8 with simple configs; TypeScript rules are relaxed to allow temporary `any` and ignore underscore-prefixed unused vars.
-- Run all:
-  - `npm run lint --prefix services/news-api && npm run lint --prefix services/rss-mcp && npm run lint --prefix services/ui-news && npm run lint --prefix services/ui-portal`
-```
