@@ -7,39 +7,57 @@ Built as a practical CIAM lab using **Keycloak**, this repo walks through OIDC &
 
 ## Table of Contents
 
-- [Identity & Authentication UX - CIAM SSO Lab (Trying out Keycloak)](#identity--authentication-ux---ciam-sso-lab-trying-out-keycloak)
+- [Identity \& Authentication UX - CIAM SSO Lab (Trying out Keycloak)](#identity--authentication-ux---ciam-sso-lab-trying-out-keycloak)
+  - [Table of Contents](#table-of-contents)
   - [Topics / Keywords](#topics--keywords)
   - [Phase 1: OIDC Brokering → Phase 2: SAML Brokering](#phase-1-oidc-brokering--phase-2-saml-brokering)
   - [Assumptions](#assumptions)
   - [Quick Start (Local)](#quick-start-local)
+    - [Dev URLs (HTTPS)](#dev-urls-https)
     - [Troubleshooting: Account Console spinner (dev)](#troubleshooting-account-console-spinner-dev)
-  - [PHASE 0 ✅ — BASELINE](#phase-0--baseline)
+- [PHASE 0 ✅ — BASELINE](#phase-0---baseline)
+  - [Goal](#goal)
     - [0.1 Create OIDC clients for the UIs](#01-create-oidc-clients-for-the-uis)
     - [0.2 API client + JWT validation](#02-api-client--jwt-validation)
-    - [0.3 Session & Storage Guidance](#03-session--storage-guidance-)
-  - [PHASE 1 ✅ — OIDC REALM-TO-REALM BROKERING (FAST PROOF)](#phase-1--oidc-realm-to-realm-brokering-fast-proof)
-    - [1. PORTAL REALM (acts as OIDC IdP)](#1-portal-realm-acts-as-oidc-idp)
-    - [2. NEWS REALM (acts as OIDC Broker)](#2-news-realm-acts-as-oidc-broker)
-    - [3. AUTO-REDIRECT (OPTIONAL, NICE-TO-HAVE)](#3-auto-redirect-optional-nice-to-have)
-    - [4. TEST OIDC SSO (REQUIRED)](#4-test-oidc-sso-required)
-    - [Scripts Cheat Sheet](#scripts-cheat-sheet)
-  - [PHASE 1.5 ✅ — CIAM “APP FUNDAMENTALS”](#phase-15--ciam-app-fundamentals)
-  - [PHASE 1.6 ✅ — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)](#phase-16--ciam-app-fundamentals-nice-to-have)
-    - [1.6.1 Self-service lifecycle](#161-self-service-lifecycle)
-    - [1.6.2 MFA + step-up](#162-mfa--step-up)
-    - [1.6.3 WebAuthn (MFA/Passwordless) — Dev Simulation](#163-webauthn-mfapasswordless--dev-simulation)
+    - [0.3 Session \& Storage Guidance `[✓]`](#03-session--storage-guidance-)
+- [PHASE 1 ✅ — OIDC REALM-TO-REALM BROKERING (FAST PROOF)](#phase-1---oidc-realm-to-realm-brokering-fast-proof)
+  - [Goal](#goal-1)
+  - [1. PORTAL REALM (acts as OIDC IdP)](#1-portal-realm-acts-as-oidc-idp)
+    - [Create OIDC Client (REQUIRED)](#create-oidc-client-required)
+    - [Redirect URIs (REQUIRED)](#redirect-uris-required)
+    - [Copy (REQUIRED)](#copy-required)
+  - [2. NEWS REALM (acts as OIDC Broker)](#2-news-realm-acts-as-oidc-broker)
+    - [Add Identity Provider (REQUIRED)](#add-identity-provider-required)
+      - [Settings](#settings)
+  - [3. AUTO-REDIRECT (OPTIONAL, NICE-TO-HAVE)](#3-auto-redirect-optional-nice-to-have)
+    - [Identity Provider Redirector](#identity-provider-redirector)
+  - [4. TEST OIDC SSO (REQUIRED)](#4-test-oidc-sso-required)
+  - [Scripts Cheat Sheet](#scripts-cheat-sheet)
+- [PHASE 1.5 ✅ — CIAM “APP FUNDAMENTALS”](#phase-15---ciam-app-fundamentals)
+  - [1.5.1 Account linking + duplication controls](#151-account-linking--duplication-controls)
+  - [1.5.2 Claims \& token design](#152-claims--token-design)
+  - [1.5.3 Authorization baseline](#153-authorization-baseline)
+- [PHASE 1.6 ✅ — CIAM “APP FUNDAMENTALS” (NICE-TO-HAVE)](#phase-16---ciam-app-fundamentals-nice-to-have)
+  - [1.6.1 Self-service lifecycle](#161-self-service-lifecycle)
+  - [1.6.2 MFA + step-up](#162-mfa--step-up)
+  - [1.6.3 WebAuthn (MFA/Passwordless) — Dev Simulation](#163-webauthn-mfapasswordless--dev-simulation)
     - [1.6.4 WebAuthn Passwordless — Browser Flow](#164-webauthn-passwordless--browser-flow)
-  - [PHASE 2 — ✅ SWITCH BROKER TO SAML](#phase-2----switch-broker-to-saml)
+- [PHASE 2 — ✅ SWITCH BROKER TO SAML](#phase-2---switch-broker-to-saml)
+  - [Goal](#goal-2)
     - [Scripted Setup (Recommended)](#scripted-setup-recommended)
-    - [5. NEWS REALM — CREATE SAML IDP (SP METADATA)](#5-news-realm--create-saml-idp-sp-metadata-required)
-    - [6. PORTAL REALM — CREATE SAML CLIENT (IdP SIDE)](#6-portal-realm--create-saml-client-idp-side-required)
-    - [7. NEWS REALM — IMPORT PORTAL METADATA](#7-news-realm--import-portal-metadata-required)
-    - [8. TEST SAML SSO (REQUIRED)](#8-test-saml-sso-required)
-  - [PHASE 2.5 — ✅ SSO (SAML) USABILITY](#phase-25--sso-saml-usability)
+  - [5. NEWS REALM — CREATE SAML IDP (SP METADATA) (REQUIRED)](#5-news-realm--create-saml-idp-sp-metadata-required)
+  - [6. PORTAL REALM — CREATE SAML CLIENT (IdP SIDE) (REQUIRED)](#6-portal-realm--create-saml-client-idp-side-required)
+  - [7. NEWS REALM — IMPORT PORTAL METADATA (REQUIRED)](#7-news-realm--import-portal-metadata-required)
+  - [8. TEST SAML SSO (REQUIRED)](#8-test-saml-sso-required)
+- [PHASE 2.5 — ✅ SSO (SAML) USABILITY](#phase-25---sso-saml-usability)
+    - [Scripted Setup (Recommended)](#scripted-setup-recommended-1)
+    - [Problems \& Solutions (Scripting Phase 2.5)](#problems--solutions-scripting-phase-25)
     - [Verify the IdP claim](#verify-the-idp-claim)
     - [Verify — Token Claim Path](#verify--token-claim-path)
     - [Verify — Events Path](#verify--events-path)
+    - [Notes](#notes)
   - [Token Verification Flow (This Repo)](#token-verification-flow-this-repo)
+    - [Quick Flow Explanation for Account SPA in Keycloak](#quick-flow-explanation-for-account-spa-in-keycloak)
   - [RESOURCES](#resources)
   - [GLOSSARY](#glossary)
 
@@ -92,7 +110,16 @@ bash tools/configure-phase1-5.sh
 - News UI: https://localhost (expect portal login or auto-redirect)
 - Portal UI: https://localhost:4443
 - Portal Account Console: https://localhost:8443/realms/portal/account (Security → Authenticator)
-- API health: http://localhost:9000/healthz | RSS: http://localhost:9002/healthz
+- API health: https://localhost/api/healthz | RSS: https://localhost/mcp/healthz
+
+### Dev URLs (HTTPS)
+- Keycloak Admin: https://localhost:8443/admin
+- News UI: https://localhost
+- Portal UI: https://localhost:4443
+- OIDC Issuer (news): https://localhost:8443/realms/news
+- OIDC Issuer (portal): https://localhost:8443/realms/portal
+- API Health: https://localhost/api/healthz
+- RSS Health: https://localhost/mcp/healthz
 
 Note: bootstrap intentionally does not run Phase 1/1.5; execute them as above.
 

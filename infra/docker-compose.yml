@@ -21,7 +21,6 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/localhost.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/localhost-key.pem
     ports:
-      - "8081:8080"
       - "8443:8443"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
@@ -42,7 +41,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: news
     ports:
-      - "55432:5432"  # Host port changed to avoid conflict with local Postgres
+      - "55433:5432"  # Host port changed to avoid conflict with local Postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -59,8 +58,7 @@ services:
     build: ../services/news-api
     environment:
       PORT: 9000
-    ports:
-      - "9000:9000"
+    # No host port; reachable via Docker network (proxied by UI)
     depends_on:
       db:
         condition: service_healthy
@@ -73,8 +71,7 @@ services:
     build: ../services/rss-mcp
     environment:
       PORT: 9002
-    ports:
-      - "9002:9002"
+    # No host port; reachable via Docker network (proxied by UI)
     restart: unless-stopped
 
   ui-news:

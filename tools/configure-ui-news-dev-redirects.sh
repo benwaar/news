@@ -12,22 +12,14 @@ REALM="news"
 CLIENT_ID="news-web"
 CONTAINER="infra-keycloak-dev"
 SERVER_URL="http://localhost:8080"   # internal URL inside container
-HOST_PORT=8081                        # host port mapped in docker-compose
+HOST_PORT=8443                        # external HTTPS port
 
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   echo "[ui-dev-redirects] Keycloak container ${CONTAINER} not running. Start stack with ./tools/up.sh" >&2
   exit 1
 fi
 
-echo "[ui-dev-redirects] Waiting for Keycloak (host port ${HOST_PORT}) ..."
-ATTEMPTS=0
-until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1
-  ATTEMPTS=$((ATTEMPTS+1))
-  if [[ $ATTEMPTS -gt 60 ]]; then
-    echo "[ui-dev-redirects] Keycloak not ready after 60s on host port ${HOST_PORT}" >&2; exit 1
-  fi
-done
+bash "$PROJECT_ROOT/tools/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
 
 echo "[ui-dev-redirects] Authenticating via kcadm ..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \

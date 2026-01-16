@@ -9,7 +9,7 @@ set -euo pipefail
 PORTAL_REALM=${PORTAL_REALM:-portal}
 NEWS_REALM=${NEWS_REALM:-news}
 CONTAINER=${CONTAINER:-infra-keycloak-dev}
-HOST_PORT=${HOST_PORT:-8081}
+HOST_PORT=${HOST_PORT:-8443}
 SERVER_URL=${SERVER_URL:-http://localhost:8080}
 
 # Constants
@@ -24,13 +24,13 @@ NEWS_BROKER_ACS="https://localhost:8443/realms/${NEWS_REALM}/broker/${NEWS_BROKE
 # Portal realm issuer (IdP alias descriptor uses IdP realm URI).
 SAML_CLIENT_ID="${PORTAL_ISSUER%/}"
 
-echo "[phase2-saml] Waiting for Keycloak on http://localhost:${HOST_PORT} ..."
+echo "[phase2-saml] Waiting for Keycloak on https://localhost:${HOST_PORT} ..."
 ATTEMPTS=0
-until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
+until curl -sSf -k "https://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf -k "https://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
   sleep 1
   ATTEMPTS=$((ATTEMPTS+1))
   if [[ $ATTEMPTS -gt 60 ]]; then
-    echo "[phase2-saml] Keycloak not ready after 60s on host port ${HOST_PORT}" >&2
+    echo "[phase2-saml] Keycloak not ready after 60s on HTTPS ${HOST_PORT}" >&2
     exit 1
   fi
 done

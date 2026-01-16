@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 
@@ -72,6 +73,19 @@ function requireRealmRole(role) {
 }
 
 app.use(helmet());
+// Enable CORS for local dev (Angular dev server and UI gateway)
+app.use(cors({
+  origin: [
+    'https://localhost',
+    'https://localhost:4200',
+    'https://localhost:4443'
+  ],
+  credentials: true,
+  methods: ['GET', 'HEAD', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type']
+}));
+// Respond to CORS preflight requests
+app.options('*', cors());
 
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok', service: 'news-api' });

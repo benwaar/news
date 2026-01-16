@@ -12,7 +12,7 @@ set -euo pipefail
 #
 CONTAINER="infra-keycloak-dev"
 SERVER_URL="http://localhost:8080" # inside container
-HOST_PORT=8081
+HOST_PORT=8443
 TARGET_REALM="portal"
 SMTP_HOST="mailpit"
 
@@ -39,9 +39,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   fail "Keycloak container ${CONTAINER} not running. Start stack with tools/up.sh."
 fi
 
-echo "[smtp-dev] Waiting for Keycloak (host port $HOST_PORT) ..."
-ATT=0; until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1; ATT=$((ATT+1)); if [[ $ATT -gt 60 ]]; then fail "Keycloak not ready after 60s"; fi; done
+bash "$(dirname "$0")/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
 
 echo "[smtp-dev] Authenticating kcadm ..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \

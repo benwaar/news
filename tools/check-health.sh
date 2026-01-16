@@ -7,8 +7,8 @@ KEYCLOAK_OIDC="https://localhost:8443/realms/news/.well-known/openid-configurati
 KEYCLOAK_ADMIN="https://localhost:8443/admin"
 UI_NEWS="https://localhost/"
 UI_PORTAL="https://localhost:4443/"
-NEWS_API="http://localhost:9000/healthz"
-RSS_MCP="http://localhost:9002/healthz"
+NEWS_API="https://localhost/api/healthz"
+RSS_MCP="https://localhost/mcp/healthz"
 MAILPIT_UI="http://localhost:8025/"
 
 PASS=0

@@ -34,7 +34,7 @@ export class AppComponent {
   private realm = 'news';
   private kcBase = 'https://localhost:8443';
   private clientId = 'news-web';
-  private redirectUri = window.location.origin;
+  private redirectUri = window.location.origin + '/';
   accountUrl = `${this.kcBase}/realms/${this.realm}/account`;
 
   constructor(){

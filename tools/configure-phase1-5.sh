@@ -10,7 +10,7 @@ set -euo pipefail
 
 CONTAINER="infra-keycloak-dev"
 SERVER_URL="http://localhost:8080" # inside container
-HOST_PORT=8081
+HOST_PORT=8443
 NEWS_REALM="news"
 IDP_ALIAS="portal-oidc"
 ROLE_NAME="news:admin"
@@ -21,9 +21,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   fail "Keycloak container ${CONTAINER} not running. Start stack with tools/bootstrap.sh or tools/up.sh."
 fi
 
-echo "[phase1.5] Waiting for Keycloak (host port $HOST_PORT) ..."
-ATT=0; until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1; ATT=$((ATT+1)); if [[ $ATT -gt 60 ]]; then fail "Keycloak not ready after 60s"; fi; done
+bash "$(dirname "$0")/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
 
 echo "[phase1.5] Authenticating kcadm ..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \

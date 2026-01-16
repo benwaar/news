@@ -9,19 +9,10 @@ set -euo pipefail
 PORTAL_REALM=${PORTAL_REALM:-portal}
 NEWS_REALM=${NEWS_REALM:-news}
 CONTAINER=${CONTAINER:-infra-keycloak-dev}
-HOST_PORT=${HOST_PORT:-8081}
+HOST_PORT=${HOST_PORT:-8443}
 ADMIN_BASE=${ADMIN_BASE:-https://localhost:8443}
 
-echo "[phase2.5-idp-claim-partial] Waiting for Keycloak on http://localhost:${HOST_PORT} ..."
-ATTEMPTS=0
-until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1
-  ATTEMPTS=$((ATTEMPTS+1))
-  if [[ $ATTEMPTS -gt 60 ]]; then
-    echo "[phase2.5-idp-claim-partial] Keycloak not ready after 60s on host port ${HOST_PORT}" >&2
-    exit 1
-  fi
-done
+bash "$(dirname "$0")/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
 
 mktempfile() { mktemp 2>/dev/null || mktemp -t kc; }
 

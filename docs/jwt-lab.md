@@ -5,6 +5,7 @@
 - [JWT Starter Lab — Browser Tokens (JS + Angular)](#jwt-starter-lab--browser-tokens-js--angular)
   - [Table of Contents](#table-of-contents)
   - [Goal](#goal)
+    - [Dev URLs (HTTPS)](#dev-urls-https)
   - [Assumptions](#assumptions)
   - [Vocabulary (Fast)](#vocabulary-fast)
   - [What You Should Measure](#what-you-should-measure)
@@ -47,6 +48,13 @@ Experiment with JWT access tokens in **browser apps** (plain JS + Angular):
    10.0.15 (ang 15) - 18 in 18
   - **angular-oauth2-oidc**
    Flexible, lower-level OAuth2/OIDC toolkit for Angular; you compose behavior with OAuthService and config.
+
+### Dev URLs (HTTPS)
+- Keycloak Admin: https://localhost:8443/admin
+- News UI: https://localhost
+- Portal UI: https://localhost:4443
+- API Health: https://localhost/api/healthz
+- RSS Health: https://localhost/mcp/healthz
 
 
 ---

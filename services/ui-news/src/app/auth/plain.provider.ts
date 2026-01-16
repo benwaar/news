@@ -4,6 +4,7 @@ import { pkceKey, tokenKey } from './storage';
 
 export class PlainAuthProvider implements AuthProvider {
   private cfg!: AuthConfig;
+  private apiBase: string = '';
   private accessToken: string | null = null;
   private accessTokenExp: number | null = null;
   private tokenPayload: any = null;
@@ -12,6 +13,11 @@ export class PlainAuthProvider implements AuthProvider {
 
   async init(config: AuthConfig): Promise<AuthState> {
     this.cfg = config;
+    // Use UI gateway directly in dev to avoid proxy SSL issues
+    try {
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      this.apiBase = port === '4200' ? 'https://localhost' : '';
+    } catch (_) { this.apiBase = ''; }
     try {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
@@ -71,7 +77,7 @@ export class PlainAuthProvider implements AuthProvider {
 
   async validateToken(): Promise<any> {
     if (!this.accessToken) return null;
-    const resp = await fetch('/api/token/validate', {
+    const resp = await fetch(`${this.apiBase}/api/token/validate`, {
       headers: { 'Authorization': `Bearer ${this.accessToken}` }
     });
     const ct = resp.headers.get('content-type') || '';
@@ -84,7 +90,7 @@ export class PlainAuthProvider implements AuthProvider {
 
   async fetchRss(): Promise<any> {
     if (!this.accessToken) return null;
-    const resp = await fetch('/api/rss', {
+    const resp = await fetch(`${this.apiBase}/api/rss`, {
       headers: { 'Authorization': `Bearer ${this.accessToken}` }
     });
     return await resp.json();
@@ -92,7 +98,7 @@ export class PlainAuthProvider implements AuthProvider {
 
   async adminPing(): Promise<{ status: number; body: any }> {
     if (!this.accessToken) return { status: 0, body: null };
-    const resp = await fetch('/api/admin/ping', {
+    const resp = await fetch(`${this.apiBase}/api/admin/ping`, {
       headers: { 'Authorization': `Bearer ${this.accessToken}` }
     });
     let body: any;

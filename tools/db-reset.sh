@@ -39,7 +39,7 @@ fi
 if $START_AFTER; then
   echo "[db-reset] Starting stack..."
   ./tools/up.sh
-  echo "[db-reset] Stack restarted. You can connect via: PGPASSWORD=news psql -h localhost -p 55432 -U news -d news"
+  echo "[db-reset] Stack restarted. You can connect via: PGPASSWORD=news psql -h localhost -p 55433 -U news -d news"
 else
   echo "[db-reset] Reset complete. Stack not started (--no-up)."
 fi

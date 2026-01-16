@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 COMPOSE_FILE="$REPO_ROOT/infra/docker-compose.yml"
 CERT_DIR="$REPO_ROOT/infra/keycloak/certs"
-HOST_KC_PORT=8081
+HOST_KC_PORT=8443
 NO_CONFIG=false
 
 for arg in "$@"; do
@@ -54,17 +54,7 @@ function up_core() {
 }
 
 function wait_keycloak() {
-  echo "[bootstrap] Waiting for Keycloak on http://localhost:${HOST_KC_PORT} ..."
-  local attempts=0
-  until curl -sSf "http://localhost:${HOST_KC_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_KC_PORT}" >/dev/null 2>&1; do
-    sleep 1
-    attempts=$((attempts+1))
-    if [[ $attempts -gt 60 ]]; then
-      echo "[bootstrap] Keycloak not ready after 60s." >&2
-      exit 3
-    fi
-  done
-  echo "[bootstrap] Keycloak is responding."
+  "$REPO_ROOT"/tools/wait-keycloak.sh --port "$HOST_KC_PORT" --timeout 60
 }
 
 function configure_realm() {
@@ -77,6 +67,15 @@ function configure_ui_news_dev_redirects() {
     bash "$REPO_ROOT"/tools/configure-ui-news-dev-redirects.sh || true
   else
     echo "[bootstrap] Skipping: tools/configure-ui-news-dev-redirects.sh not found"
+  fi
+}
+
+function configure_ui_redirects() {
+  echo "[bootstrap] Configuring UI redirects/origins for prod hosts (https://localhost, https://localhost:4443) ..."
+  if [[ -f "$REPO_ROOT/tools/configure-ui-redirects.sh" ]]; then
+    bash "$REPO_ROOT"/tools/configure-ui-redirects.sh || true
+  else
+    echo "[bootstrap] Skipping: tools/configure-ui-redirects.sh not found"
   fi
 }
 
@@ -132,6 +131,7 @@ up_core
 wait_keycloak
 if [[ "$NO_CONFIG" == false ]]; then
   configure_realm
+  configure_ui_redirects
   configure_ui_news_dev_redirects
   ensure_db
 else
@@ -143,4 +143,4 @@ echo "[bootstrap] Waiting 12s before health checks ..."
 sleep 12 || true
 run_health
 
-echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55432 | UI-News: https://localhost | UI-Portal: https://localhost:4443"
+echo "[bootstrap] Done. Admin: https://localhost:8443/admin | DB: news/news @ localhost:55433 | UI-News: https://localhost | UI-Portal: https://localhost:4443"

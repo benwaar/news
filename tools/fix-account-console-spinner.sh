@@ -6,19 +6,10 @@ set -euo pipefail
 
 REALM=${REALM:-portal}
 CONTAINER=${CONTAINER:-infra-keycloak-dev}
-HOST_PORT=${HOST_PORT:-8081}
+HOST_PORT=${HOST_PORT:-8443}
 SERVER_URL=${SERVER_URL:-http://localhost:8080}
 
-echo "[spinner-fix] Waiting for Keycloak on http://localhost:${HOST_PORT} ..."
-ATTEMPTS=0
-until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1
-  ATTEMPTS=$((ATTEMPTS+1))
-  if [[ $ATTEMPTS -gt 60 ]]; then
-    echo "[spinner-fix] Keycloak not ready after 60s on host port ${HOST_PORT}" >&2
-    exit 1
-  fi
-done
+bash "$(dirname "$0")/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
 
 echo "[spinner-fix] Authenticating kcadm ..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \

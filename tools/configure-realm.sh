@@ -9,9 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
 REALM_FILE="${PROJECT_ROOT}/infra/keycloak/realm-news.json"
 CONTAINER="infra-keycloak-dev"
-# Keycloak listens on 8080 inside the container; host is mapped to 8081 in docker-compose.
+# Keycloak listens on 8080 inside the container; external HTTPS is on 8443.
 SERVER_URL="http://localhost:8080" # internal
-HOST_PORT=8081
+HOST_PORT=8443
 FORCE=false
 
 for arg in "$@"; do
@@ -35,16 +35,8 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
 	exit 1
 fi
 
-echo "[realm] Waiting for Keycloak (host port $HOST_PORT) to be reachable..."
-ATTEMPTS=0
-until curl -sSf "http://localhost:${HOST_PORT}" >/dev/null 2>&1 || curl -sSf "http://127.0.0.1:${HOST_PORT}" >/dev/null 2>&1; do
-  sleep 1
-  ATTEMPTS=$((ATTEMPTS+1))
-  if [[ $ATTEMPTS -gt 60 ]]; then
-    echo "Keycloak not ready after 60s on host port ${HOST_PORT}" >&2; exit 1
-  fi
-done
-echo "[realm] Host port is responding; proceeding with kcadm (internal URL $SERVER_URL)."
+bash "$PROJECT_ROOT/tools/wait-keycloak.sh" --port "$HOST_PORT" --timeout 60
+echo "[realm] HTTPS endpoint is responding; proceeding with kcadm (internal URL $SERVER_URL)."
 
 echo "[realm] Authenticating via kcadm..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
