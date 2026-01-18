@@ -4,6 +4,13 @@ This project is a deliberate, local-first lab exploration of modern “agentic�
 
 Goal: Cretae a local lab for security experiments. Then build a news briefing system that (1) ingests from RSS via MCP tools, (2) deduplicates and stores items, (3) ranks novelty against “what I know” using local embeddings, and (4) optionally uses an LLM/agent layer for synthesis.
 
+🧠 Vector DB learning goal (explicit):
+Understand embeddings systems as hybrid databases that combine:
+- structured relational data
+- semi-structured jsonb metadata
+- vector similarity search
+- deterministic + approximate retrieval trade-offs
+
 Non-goals (initially):
 - No paywalled scraping
 - No auto-posting to social platforms
@@ -15,25 +22,28 @@ Non-goals (initially):
 This project is being created in “Python Fluency Mode”. The goal is learning the language, not enforcing specs.
 Refactors are allowed. Mistakes are expected.
 
-This project uses a **KERNEL-inspired approach** while coding interactively via chat.
+This project uses a KERNEL-inspired approach while coding interactively via chat.
 
-The goal is **language fluency and understanding**, not formal specification or locked behavior.
+The goal is language fluency and understanding, not formal specification or locked behavior.
 
 ### What “vibe coding” means here
-- Build **one small, runnable step at a time**
+- Build one small, runnable step at a time
 - Use the chat window to propose the next step
 - Run the code immediately
 - Debug from real errors and outputs
 - Refactor freely as understanding improves
 
-This is *interactive co-building*, not copy-pasting large solutions.
+This is interactive co-building, not copy-pasting large solutions.
 
 ## Phase 0 — Lab Baseline
 
 Deliverables:
-- [setup-notes.md](docs/setup-notes.md): setup a fresh local environment
-- [keycloak-ciam-lab.md](docs/keycloak-ciam-lab.md): Keycloak CIAM tests and setup notes
-- [jwt-lab.md](docs/jwt-lab.md): JWT experiments
+- setup-notes.md: setup a fresh local environment
+- keycloak-ciam-lab.md: Keycloak CIAM tests and setup notes
+- jwt-lab.md: JWT experiments
+
+🧠 Add:
+- Notes on when SQLite stops being sufficient and why Postgres + vectors are introduced later
 
 ## Phase 1 — Deterministic Core
 
@@ -54,6 +64,9 @@ Acceptance:
 - Brief output is deterministic from DB contents
 - Works offline after ingest (reading DB only)
 
+🧠 Add (conceptual groundwork):
+- Identify which fields are true schema vs future metadata
+- Document which attributes are expected to become jsonb later
 
 ## Phase 2 — MCP Integration
 
@@ -71,6 +84,8 @@ Acceptance:
 - MCP server can be swapped without changing storage logic
 - Logs show tool calls and failures clearly
 
+🧠 Add:
+- Store feed-specific or tool-specific artifacts as opaque metadata blobs (future jsonb fields)
 
 ## Phase 3 — Embeddings “Memory”
 
@@ -81,6 +96,14 @@ Scope:
   - “known” notes (known.md or notes/ chunks)
 - Novelty score based on similarity to known + recent history
 
+🧠 Vector DB design decisions (explicit):
+- Embedding dimensionality and model choice
+- Distance metric (cosine / dot / L2) and why
+- Chunking strategy:
+  - title-only vs summary-only vs combined
+  - fixed vs semantic chunking
+- Deterministic brute-force similarity vs indexed ANN search
+
 Deliverables:
 - Indexing endpoints or commands:
   - POST /index/items (embed items missing vectors)
@@ -88,11 +111,15 @@ Deliverables:
 - GET /brief/today?novel=1&top=N (top N by novelty)
 - Optional clustering into themes (by similarity)
 
+🧠 Add:
+- Persist similarity scores and novelty scores alongside items
+- Record embedding model name and chunking strategy used
+
 Acceptance:
 - Novelty ranking changes as known.md grows
 - System works fully offline
 - Results are reproducible given same model + data
-
+- 🧠 Similarity scores are inspectable and logged (not opaque)
 
 ## Phase 4 — Agent Loop (no LLM required)
 
@@ -102,16 +129,23 @@ Scope:
 - This is an agent in the “decision loop” sense, not necessarily LLM-based.
 
 Deliverables:
-- CLI: `python -m news.agent_runner --daily`
+- CLI: python -m news.agent_runner --daily
 - Stopping rules:
   - if no new items, stop
   - if novelty below threshold, skip expensive steps
 - Structured run report (what happened and why)
 
+🧠 Add (agent + vector transparency):
+- Persist agent decisions per item:
+  - novelty score
+  - threshold applied
+  - skip / select reason
+- Store this trace as structured metadata (jsonb-friendly)
+
 Acceptance:
 - One command produces the daily brief end-to-end
 - Logs explain decisions (why items were selected/skipped)
-
+- 🧠 Agent behavior is auditable after the fact
 
 ## Phase 5 — Optional LLM Synthesis Layer (optional)
 
@@ -128,11 +162,14 @@ Deliverables:
   - LLM never mutates DB state
   - LLM suggestions to update known.md are written to a separate “suggestions” file for review
 
+🧠 Add:
+- Store LLM outputs and prompts as non-authoritative metadata
+- Explicitly separate semantic memory (embeddings) from advisory synthesis
+
 Acceptance:
 - System still works without LLM enabled
 - AI output is clearly marked as advisory
 - Cost controls exist if using a cloud key (top-N only)
-
 
 ## Phase 6 — Quality + Security Extensions (optional)
 
@@ -140,16 +177,25 @@ Scope ideas (choose based on interest):
 - MCP security scanner tools (SAST/DAST) to enrich brief with “security-relevant” items
 - Source trust scoring and allow/deny lists
 
+🧠 Add:
+- Attach security findings, trust scores, and provenance as evolving jsonb metadata
+- Query vector similarity with metadata filters (e.g., security-relevant only)
 
 ## Summary
 
 This project deliberately builds “agent capability” in layers:
 
-1) deterministic system of record
-2) MCP tool usage (typed RPC)
-3) embeddings as memory + novelty
-4) agent loop (planning + stopping)
-5) optional LLM synthesis
+1) deterministic system of record  
+2) MCP tool usage (typed RPC)  
+3) embeddings as memory + novelty  
+4) agent loop (planning + stopping)  
+5) optional LLM synthesis  
+
+🧠 Throughout, the system explicitly practices:
+- hybrid relational + jsonb + vector design
+- inspectable similarity and novelty scoring
+- deterministic vs approximate retrieval trade-offs
+- auditable agent decisions
 
 At every stage, the system remains usable and testable.
 
