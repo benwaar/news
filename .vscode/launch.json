@@ -3,6 +3,22 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "News API (Node) — http://localhost:9000",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/services/news-api/src/index.js",
+      "cwd": "${workspaceFolder}/services/news-api",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "PORT": "9000",
+        "OIDC_ISSUER": "https://localhost:8443/realms/news",
+        "OIDC_AUDIENCE": "news-api",
+        "OIDC_JWKS_URI": "https://localhost:8443/realms/news/protocol/openid-connect/certs",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+      }
+    },
+    {
       "name": "Angular UI (Chrome) — https://localhost:4200",
       "type": "pwa-chrome",
       "request": "launch",

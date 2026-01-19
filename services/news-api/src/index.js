@@ -93,6 +93,7 @@ app.get('/healthz', (req, res) => {
 
 // Token validation probe: reports whether token passed standard checks
 app.get('/token/validate', authenticateToken, (req, res) => {
+  console.log("Validating token for sub:", req.user && req.user.sub);
   const now = Math.floor(Date.now() / 1000);
   const issOk = req.user && req.user.iss === ISSUER;
   const audClaim = req.user && req.user.aud;
