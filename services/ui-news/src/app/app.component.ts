@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
-import { createJwtHS256, decodeJwtParts, verifyJwtHS256 } from './utils';
+import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles } from './utils';
 
 @Component({
   selector: 'app-root',
@@ -48,6 +48,9 @@ export class AppComponent {
   labDecodedPayload: any = null;
   labVerify: boolean | null = null;
   labError = '';
+  labTtl = 120; // default TTL seconds for lab-generated tokens
+  labExpiresIn: number | null = null;
+  private labTimer: any = null;
 
   // JWT Lab tabs
   labTabs = [
@@ -68,6 +71,16 @@ export class AppComponent {
     { id: 'jwt-lab', label: 'JWT Lab' },
   ];
   selectedMainTab = 'basics';
+  accessTokenExpiresIn: number | null = null;
+  accessHeader: any = null;
+  basicsClaims: {
+    alg?: string;
+    issOk?: boolean;
+    aud?: string[] | null;
+    expOk?: boolean;
+    subOk?: boolean;
+    roles?: string[] | null;
+  } = {};
 
   constructor(){
     // Determine environment by port (dev: 4200, prod: 80)
@@ -98,6 +111,7 @@ export class AppComponent {
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.updateBasicsDerived();
     });
   }
 
@@ -130,6 +144,7 @@ export class AppComponent {
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.updateBasicsDerived();
     });
   }
 
@@ -185,6 +200,10 @@ export class AppComponent {
     this.labError = '';
     try {
       const payload = JSON.parse(this.labPayloadText || '{}');
+      const now = Math.floor(Date.now()/1000);
+      if (typeof payload.exp !== 'number') {
+        payload.exp = now + (this.labTtl || 0);
+      }
       this.labGenerated = await createJwtHS256(payload, this.labSecret || '');
       this.labInput = this.labGenerated;
       const parts = decodeJwtParts(this.labGenerated);
@@ -192,6 +211,7 @@ export class AppComponent {
       this.labDecodedPayload = parts.payload;
       const v = await verifyJwtHS256(this.labGenerated, this.labSecret || '');
       this.labVerify = v.valid;
+      this.updateLabExpires();
     } catch (e) {
       this.labError = 'Generate failed: ' + String(e);
     }
@@ -203,6 +223,7 @@ export class AppComponent {
       const parts = decodeJwtParts(this.labInput || '');
       this.labDecodedHeader = parts.header;
       this.labDecodedPayload = parts.payload;
+      this.updateLabExpires();
     } catch (e) {
       this.labError = 'Decode failed: ' + String(e);
     }
@@ -215,6 +236,7 @@ export class AppComponent {
       this.labVerify = v.valid;
       this.labDecodedHeader = v.header;
       this.labDecodedPayload = v.payload;
+      this.updateLabExpires();
     } catch (e) {
       this.labError = 'Verify failed: ' + String(e);
     }
@@ -226,5 +248,61 @@ export class AppComponent {
 
   selectMainTab(id: string) {
     this.selectedMainTab = id;
+  }
+
+  private stopAccessCountdown() {
+    if (this.tokenTimer) {
+      try { clearInterval(this.tokenTimer); } catch {}
+      this.tokenTimer = null;
+    }
+  }
+
+  private startAccessCountdown() {
+    this.stopAccessCountdown();
+    this.accessTokenExpiresIn = computeExpiresInSeconds(this.accessTokenExp);
+    if (this.accessTokenExp) {
+      this.tokenTimer = setInterval(() => {
+        this.accessTokenExpiresIn = computeExpiresInSeconds(this.accessTokenExp);
+        if (this.accessTokenExpiresIn === 0) this.stopAccessCountdown();
+      }, 1000);
+    }
+  }
+
+  private updateBasicsDerived() {
+    // Update countdown
+    this.startAccessCountdown();
+    // Update header/claims
+    this.accessHeader = this.accessToken ? decodeJwtParts(this.accessToken).header : null;
+    const payload: any = this.tokenPayload || null;
+    const audNorm: string[] | null = normalizeAudience(payload);
+    const roles: string[] | null = extractRoles(payload);
+    const expOk = typeof this.accessTokenExp === 'number' ? (computeExpiresInSeconds(this.accessTokenExp) || 0) > 0 : false;
+    this.basicsClaims = {
+      alg: this.accessHeader?.alg,
+      issOk: typeof payload?.iss === 'string' && payload.iss.length > 0,
+      aud: audNorm,
+      expOk,
+      subOk: typeof payload?.sub === 'string' && payload.sub.length > 0,
+      roles: Array.isArray(roles) ? roles : null,
+    };
+  }
+
+  private stopLabCountdown() {
+    if (this.labTimer) {
+      try { clearInterval(this.labTimer); } catch {}
+      this.labTimer = null;
+    }
+  }
+
+  private updateLabExpires() {
+    const exp = this.labDecodedPayload && typeof this.labDecodedPayload.exp === 'number' ? this.labDecodedPayload.exp : null;
+    this.labExpiresIn = computeExpiresInSeconds(exp);
+    this.stopLabCountdown();
+    if (exp) {
+      this.labTimer = setInterval(() => {
+        this.labExpiresIn = computeExpiresInSeconds(exp);
+        if (this.labExpiresIn === 0) this.stopLabCountdown();
+      }, 1000);
+    }
   }
 }

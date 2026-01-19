@@ -121,3 +121,25 @@ export async function verifyJwtHS256(token: string, secret: string): Promise<{ v
     return { valid: false, header: null, payload: null };
   }
 }
+
+// ---------- General JWT claim helpers ----------
+
+export function computeExpiresInSeconds(exp: number | null): number | null {
+  if (!exp || typeof exp !== 'number') return null;
+  const now = Math.floor(Date.now() / 1000);
+  return Math.max(0, exp - now);
+}
+
+export function normalizeAudience(payload: any): string[] | null {
+  if (!payload) return null;
+  const aud = payload.aud;
+  if (Array.isArray(aud)) return aud as string[];
+  if (typeof aud === 'string') return [aud];
+  return null;
+}
+
+export function extractRoles(payload: any): string[] | null {
+  if (!payload) return null;
+  const roles = payload?.realm_access?.roles ?? payload?.roles ?? payload?.groups ?? null;
+  return Array.isArray(roles) ? roles : null;
+}

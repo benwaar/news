@@ -36,19 +36,32 @@
       </p>
       <p>
         <button (click)="validateToken()" [disabled]="!accessToken || authMode!=='plain'">Validate Token</button>
-        <button (click)="fetchRss" [disabled]="!accessToken || authMode!=='plain'">Fetch RSS</button>
+        <button (click)="fetchRss()" [disabled]="!accessToken || authMode!=='plain'">Fetch RSS</button>
         <button (click)="toggleToken()" [disabled]="!accessToken">{{ showToken ? 'Hide' : 'Show' }} Token</button>
         <button (click)="copyToken()" [disabled]="!accessToken || authMode!=='plain'">Copy Token</button>
         <button (click)="adminPing()" [disabled]="!accessToken || authMode!=='plain'">Admin Ping</button>
       </p>
       <p *ngIf="accessTokenExp">
         Token expires at: {{ accessTokenExp * 1000 | date:'medium' }}
+        <br />
+        Expires in: {{ accessTokenExpiresIn }}s
       </p>
       <div *ngIf="showToken && accessToken">
         <h3>Access Token (debug)</h3>
         <textarea rows="6" readonly>{{ accessToken }}</textarea>
         <h4>Decoded Claims</h4>
         <pre>{{ tokenPayload | json }}</pre>
+        <div class="spaced">
+          <h4>Claims Checklist (dev)</h4>
+          <ul>
+            <li>Header alg (Algorithm): <strong>{{ basicsClaims.alg || 'n/a' }}</strong></li>
+            <li>[iss] Issuer present: <strong [style.color]="basicsClaims.issOk ? 'green' : 'crimson'">{{ basicsClaims.issOk ? 'yes' : 'no' }}</strong></li>
+            <li>[aud] Audience: <strong>{{ basicsClaims.aud ? basicsClaims.aud.join(', ') : 'n/a' }}</strong></li>
+            <li>[sub] Subject present: <strong [style.color]="basicsClaims.subOk ? 'green' : 'crimson'">{{ basicsClaims.subOk ? 'yes' : 'no' }}</strong></li>
+            <li>[exp] Expires valid (not expired): <strong [style.color]="basicsClaims.expOk ? 'green' : 'crimson'">{{ basicsClaims.expOk ? 'yes' : 'no' }}</strong></li>
+            <li>Roles/Groups: <strong>{{ basicsClaims.roles ? basicsClaims.roles.join(', ') : 'n/a' }}</strong></li>
+          </ul>
+        </div>
       </div>
       <div *ngIf="tokenValidation">
         <h3>Token Validation</h3>
@@ -99,6 +112,10 @@
       <label>Secret:&nbsp;</label>
       <input type="text" [(ngModel)]="labSecret" placeholder="secret" style="width: 240px;" />
     </div>
+    <div class="spaced">
+      <label>TTL (seconds):&nbsp;</label>
+      <input type="number" [(ngModel)]="labTtl" min="0" style="width: 120px;" />
+    </div>
     <div>
       <label>Payload (JSON):</label>
       <textarea rows="6" [(ngModel)]="labPayloadText" placeholder='{"sub":"123","name":"Alice"}'></textarea>
@@ -127,6 +144,15 @@
       <div>
         <h4>Decoded Payload</h4>
         <pre>{{ labDecodedPayload | json }}</pre>
+        <p *ngIf="labExpiresIn !== null">Expires in: {{ labExpiresIn }}s</p>
+        <div class="spaced">
+          <h4>Claims Checklist (dev)</h4>
+          <ul>
+            <li>Header alg (Algorithm): <strong>{{ labDecodedHeader?.alg || 'n/a' }}</strong></li>
+            <li>[sub] Subject present: <strong [style.color]="labDecodedPayload?.sub ? 'green' : 'crimson'">{{ labDecodedPayload?.sub ? 'yes' : 'no' }}</strong></li>
+            <li>[exp] Expires present: <strong [style.color]="(labDecodedPayload?.exp !== undefined) ? 'green' : 'crimson'">{{ (labDecodedPayload?.exp !== undefined) ? 'yes' : 'no' }}</strong></li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
