@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
-import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles } from './utils';
+import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles, fetchRealmJwks, verifyJwtRS256WithJwk } from './utils';
 
 @Component({
   selector: 'app-root',
@@ -55,7 +55,7 @@ export class AppComponent {
   // JWT Lab tabs
   labTabs = [
     { id: 'hs256-basic', label: 'HS256 (basic)', ready: true },
-    { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: false },
+    { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: true },
     { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: false },
     { id: 'interceptor', label: 'Interceptor: Attach', ready: false },
     { id: 'refresh', label: '401→Refresh→Retry', ready: false },
@@ -81,6 +81,15 @@ export class AppComponent {
     subOk?: boolean;
     roles?: string[] | null;
   } = {};
+
+  // RS256 + JWKS (dev-only) state
+  rsTokenInput = '';
+  rsDecodedHeader: any = null;
+  rsDecodedPayload: any = null;
+  rsKid: string | null = null;
+  rsVerify: boolean | null = null;
+  rsError = '';
+  rsJwks: JsonWebKey[] = [];
 
   constructor(){
     // Determine environment by port (dev: 4200, prod: 80)
@@ -303,6 +312,47 @@ export class AppComponent {
         this.labExpiresIn = computeExpiresInSeconds(exp);
         if (this.labExpiresIn === 0) this.stopLabCountdown();
       }, 1000);
+    }
+  }
+
+  // ---------- RS256 + JWKS (dev-only) ----------
+  rsDecodeToken() {
+    this.rsError = '';
+    try {
+      const parts = decodeJwtParts(this.rsTokenInput || '');
+      this.rsDecodedHeader = parts.header;
+      this.rsDecodedPayload = parts.payload;
+      this.rsKid = parts.header?.kid || null;
+      this.rsVerify = null;
+    } catch (e) {
+      this.rsError = 'Decode failed: ' + String(e);
+    }
+  }
+
+  async rsFetchJwks() {
+    this.rsError = '';
+    try {
+      const jwks = await fetchRealmJwks(this.kcBase, this.realm);
+      this.rsJwks = jwks.keys || [];
+    } catch (e) {
+      this.rsError = 'JWKS fetch failed: ' + String(e);
+    }
+  }
+
+  async rsVerifyWithJwks() {
+    this.rsError = '';
+    this.rsVerify = null;
+    try {
+      if (!this.rsKid) throw new Error('Token header missing kid');
+      if (!this.rsJwks || this.rsJwks.length === 0) throw new Error('JWKS not loaded');
+      const jwk = this.rsJwks.find(k => (k as any).kid === this.rsKid);
+      if (!jwk) throw new Error('Matching JWK not found for kid=' + this.rsKid);
+      const result = await verifyJwtRS256WithJwk(this.rsTokenInput || '', jwk);
+      this.rsVerify = result.valid;
+      this.rsDecodedHeader = result.header;
+      this.rsDecodedPayload = result.payload;
+    } catch (e) {
+      this.rsError = 'Verify failed: ' + String(e);
     }
   }
 }

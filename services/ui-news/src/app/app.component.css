@@ -20,6 +20,14 @@ textarea {
   color: #92400e;
 }
 
+.info-panel {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 4px solid #2563eb;
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
 /* Tabs */
 .tabs { margin-top: 12px; }
 .tab-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

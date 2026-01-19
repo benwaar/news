@@ -143,3 +143,41 @@ export function extractRoles(payload: any): string[] | null {
   const roles = payload?.realm_access?.roles ?? payload?.roles ?? payload?.groups ?? null;
   return Array.isArray(roles) ? roles : null;
 }
+
+// ---------- RS256 + JWKS (dev-only) ----------
+
+
+export async function importRsaPublicKeyJwk(jwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+}
+
+export async function verifyJwtRS256WithJwk(token: string, jwk: JsonWebKey): Promise<{ valid: boolean; header: any | null; payload: any | null }>{
+  try {
+    const { header, payload, signature } = decodeJwtParts(token);
+    if (!header || !payload || !signature) return { valid: false, header, payload };
+    if (header.alg !== 'RS256') return { valid: false, header, payload };
+    const [h, p] = token.split('.');
+    const signingInput = `${h}.${p}`;
+    const sigBytes = fromBase64Url(signature);
+    const sigAb = ensureArrayBuffer(sigBytes);
+    const dataBytes = new TextEncoder().encode(signingInput);
+    const key = await importRsaPublicKeyJwk(jwk);
+    const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, sigAb, ensureArrayBuffer(dataBytes));
+    return { valid: ok, header, payload };
+  } catch {
+    return { valid: false, header: null, payload: null };
+  }
+}
+
+export async function fetchRealmJwks(kcBase: string, realm: string): Promise<{ keys: JsonWebKey[] }>{
+  const url = `${kcBase}/realms/${realm}/protocol/openid-connect/certs`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status}`);
+  return res.json();
+}

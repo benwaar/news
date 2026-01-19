@@ -104,10 +104,26 @@
       Real IdPs (e.g., Keycloak) sign tokens server-side (RS256). We use HS256 here
       to make JWT structure and signing tangible in one page.
     </div>
-    <p class="spaced">
-      This tab helps you see how a JWT is formed: base64url(header).base64url(payload).base64url(signature),
-      and what an HMAC signature actually covers. Do not use browser-side HS256 for production auth.
-    </p>
+    <div class="info-panel">
+      <h4>Glossary</h4>
+      <ul>
+        <li><strong>JWT</strong>: header + payload + signature (base64url segments).</li>
+        <li><strong>HS256</strong>: HMAC-SHA256 over <em>header.payload</em> using a shared secret.</li>
+        <li><strong>base64url</strong>: URL-safe base64 without padding.</li>
+        <li><strong>exp</strong>: Expiration (Unix seconds). Token invalid after this time.</li>
+        <li><strong>iat</strong>: Issued-at (Unix seconds).</li>
+        <li><strong>sub</strong>: Subject (stable user identifier).</li>
+      </ul>
+    </div>
+    <div class="info-panel">
+      <p>
+        This tab demonstrates the anatomy of a JWT and what the signature actually protects. You build
+        base64url(header).base64url(payload) and sign that exact string, so changing either part breaks the signature.
+        We also surface common claims like <code>sub</code>, <code>exp</code>, and <code>iat</code> so you can see how
+        they affect token validity (e.g., an <code>exp</code> countdown). Because HS256 uses a shared secret, putting the
+        signer in the browser is only for learning — real systems keep secrets server-side and avoid exposing them to JS.
+      </p>
+    </div>
     <div>
       <label>Secret:&nbsp;</label>
       <input type="text" [(ngModel)]="labSecret" placeholder="secret" style="width: 240px;" />
@@ -160,7 +176,50 @@
   <!-- RS256 + JWKS placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='rs256-jwks'">
     <h3>RS256 + JWKS</h3>
-    <p>Coming soon: decode a Keycloak access token, extract <code>kid</code>, fetch JWKS, and verify RS256 signatures in the browser (dev-only). This mirrors how your API validates tokens server-side.</p>
+    <div class="warning">Dev-only: Verify RS256 signatures in the browser with JWKS. Real verification should happen in your API.</div>
+    <div class="info-panel">
+      <h4>Glossary</h4>
+      <ul>
+        <li><strong>RS256</strong>: RSA with SHA-256; asymmetric signing (private key) and verification (public key).</li>
+        <li><strong>kid</strong>: Key ID in the JWT header to select the correct public key.</li>
+        <li><strong>JWKS</strong>: JSON Web Key Set published by the issuer; contains public keys.</li>
+        <li><strong>iss</strong>: Issuer URL; should match your realm.</li>
+        <li><strong>aud</strong>: Audience; should include your API/client as intended recipient.</li>
+      </ul>
+    </div>
+    <div class="info-panel">
+      <p>
+        RS256 uses asymmetric keys: Keycloak signs with a private key and publishes matching public keys via JWKS.
+        The token header contains a <code>kid</code> to select the right key. Your API normally fetches JWKS and verifies
+        the signature server-side, then checks claims like <code>iss</code>, <code>aud</code>, and <code>exp</code>.
+        Here we replicate that flow only for study: decode to get <code>kid</code>, fetch the realm JWKS, and verify the
+        signature against the selected public key.
+      </p>
+    </div>
+    <div>
+      <label>Token:</label>
+      <textarea rows="4" [(ngModel)]="rsTokenInput" placeholder="paste a Keycloak access token"></textarea>
+    </div>
+    <p>
+      <button (click)="rsDecodeToken()">Decode + Extract kid</button>
+      <span *ngIf="rsKid">kid: <strong>{{ rsKid }}</strong></span>
+    </p>
+    <p>
+      <button (click)="rsFetchJwks()">Fetch JWKS (realm)</button>
+      <button (click)="rsVerifyWithJwks()" [disabled]="!rsKid || rsJwks.length===0">Verify (RS256 + JWKS)</button>
+      <span *ngIf="rsVerify !== null" [style.color]="rsVerify ? 'green' : 'crimson'">{{ rsVerify ? 'signature valid' : 'invalid signature' }}</span>
+      <span *ngIf="rsError" class="error" style="margin-left: 12px;">{{ rsError }}</span>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>Decoded Header</h4>
+        <pre>{{ rsDecodedHeader | json }}</pre>
+      </div>
+      <div>
+        <h4>Decoded Payload</h4>
+        <pre>{{ rsDecodedPayload | json }}</pre>
+      </div>
+    </div>
   </div>
 
   <!-- OIDC Code+PKCE placeholder -->
