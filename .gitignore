@@ -17,7 +17,6 @@ infra/keycloak/certs/
 
 # OS/editor files
 .DS_Store
-.vscode/
 .idea/
 Thumbs.db
 

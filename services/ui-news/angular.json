@@ -18,7 +18,8 @@
             "polyfills": [],
             "assets": ["src/favicon.svg"],
             "styles": ["src/styles.css"],
-            "scripts": []
+            "scripts": [],
+            "sourceMap": true
           },
           "configurations": {
             "production": {

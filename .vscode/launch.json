@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/launch.json",
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Angular UI (Chrome) — https://localhost:4200",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "https://localhost:4200",
+      "webRoot": "${workspaceFolder}/services/ui-news",
+      "preLaunchTask": "ui-news: npm start",
+      "runtimeArgs": [
+        "--ignore-certificate-errors",
+        "--allow-insecure-localhost"
+      ],
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/src/*",
+        "webpack:///./src/*": "${webRoot}/src/*",
+        "webpack://*/src/*": "${webRoot}/src/*",
+        "webpack://src/*": "${webRoot}/src/*",
+        "webpack://news-ui/src/*": "${webRoot}/src/*",
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///*": "*",
+        "ng://app/*": "${webRoot}/src/app/*",
+        "*/src/*": "${webRoot}/src/*"
+      }
+    },
+    {
+      "name": "Attach to Chrome (9222)",
+      "type": "pwa-chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/services/ui-news"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "UI + Chrome (launch)",
+      "configurations": ["Angular UI (Chrome) — https://localhost:4200"]
+    }
+  ]
+}
