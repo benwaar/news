@@ -1,12 +1,14 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
+import { createJwtHS256, decodeJwtParts, verifyJwtHS256 } from './utils';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -36,6 +38,36 @@ export class AppComponent {
   private clientId = 'news-web';
   private redirectUri = window.location.origin + '/';
   accountUrl = `${this.kcBase}/realms/${this.realm}/account`;
+
+  // JWT Lab (basic) state
+  labSecret = 'secret';
+  labPayloadText = '{"sub":"123","name":"Alice","iat":' + Math.floor(Date.now()/1000) + '}';
+  labGenerated = '';
+  labInput = '';
+  labDecodedHeader: any = null;
+  labDecodedPayload: any = null;
+  labVerify: boolean | null = null;
+  labError = '';
+
+  // JWT Lab tabs
+  labTabs = [
+    { id: 'hs256-basic', label: 'HS256 (basic)', ready: true },
+    { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: false },
+    { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: false },
+    { id: 'interceptor', label: 'Interceptor: Attach', ready: false },
+    { id: 'refresh', label: '401→Refresh→Retry', ready: false },
+    { id: 'storage', label: 'Storage Options', ready: false },
+    { id: 'idle', label: 'Idle vs Expiry', ready: false },
+    { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
+  ];
+  selectedLabTab = 'hs256-basic';
+
+  // Main tabs (Basics / JWT Lab)
+  mainTabs = [
+    { id: 'basics', label: 'Basics' },
+    { id: 'jwt-lab', label: 'JWT Lab' },
+  ];
+  selectedMainTab = 'basics';
 
   constructor(){
     // Determine environment by port (dev: 4200, prod: 80)
@@ -146,5 +178,53 @@ export class AppComponent {
     } catch (e) {
       this.error = 'Copy failed: ' + String(e);
     }
+  }
+
+  // ---------- JWT Lab (basic, HS256) ----------
+  async labGenerate() {
+    this.labError = '';
+    try {
+      const payload = JSON.parse(this.labPayloadText || '{}');
+      this.labGenerated = await createJwtHS256(payload, this.labSecret || '');
+      this.labInput = this.labGenerated;
+      const parts = decodeJwtParts(this.labGenerated);
+      this.labDecodedHeader = parts.header;
+      this.labDecodedPayload = parts.payload;
+      const v = await verifyJwtHS256(this.labGenerated, this.labSecret || '');
+      this.labVerify = v.valid;
+    } catch (e) {
+      this.labError = 'Generate failed: ' + String(e);
+    }
+  }
+
+  labDecode() {
+    this.labError = '';
+    try {
+      const parts = decodeJwtParts(this.labInput || '');
+      this.labDecodedHeader = parts.header;
+      this.labDecodedPayload = parts.payload;
+    } catch (e) {
+      this.labError = 'Decode failed: ' + String(e);
+    }
+  }
+
+  async labVerifyNow() {
+    this.labError = '';
+    try {
+      const v = await verifyJwtHS256(this.labInput || '', this.labSecret || '');
+      this.labVerify = v.valid;
+      this.labDecodedHeader = v.header;
+      this.labDecodedPayload = v.payload;
+    } catch (e) {
+      this.labError = 'Verify failed: ' + String(e);
+    }
+  }
+
+  selectLabTab(id: string) {
+    this.selectedLabTab = id;
+  }
+
+  selectMainTab(id: string) {
+    this.selectedMainTab = id;
   }
 }

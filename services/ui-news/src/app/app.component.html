@@ -15,40 +15,162 @@
   <button (click)="login()" *ngIf="!loggedIn" [disabled]="authMode!=='plain'">Login</button>
   <button (click)="logout()" *ngIf="loggedIn" [disabled]="authMode!=='plain'">Logout</button>
 </div>
-<p>API health via UI proxy:</p>
-<pre>{{ health | json }}</pre>
-<div *ngIf="loggedIn">
-  <p class="spaced">
-    <a [href]="accountUrl" target="_blank" rel="noopener noreferrer">Open Account Console</a>
-  </p>
-  <p>
-    <button (click)="validateToken()" [disabled]="!accessToken || authMode!=='plain'">Validate Token</button>
-    <button (click)="fetchRss()" [disabled]="!accessToken || authMode!=='plain'">Fetch RSS</button>
-    <button (click)="toggleToken()" [disabled]="!accessToken">{{ showToken ? 'Hide' : 'Show' }} Token</button>
-    <button (click)="copyToken()" [disabled]="!accessToken || authMode!=='plain'">Copy Token</button>
-    <button (click)="adminPing()" [disabled]="!accessToken || authMode!=='plain'">Admin Ping</button>
-  </p>
-  <p *ngIf="accessTokenExp">
-    Token expires at: {{ accessTokenExp * 1000 | date:'medium' }}
-  </p>
-  <div *ngIf="showToken && accessToken">
-    <h3>Access Token (debug)</h3>
-    <textarea rows="6" readonly>{{ accessToken }}</textarea>
-    <h4>Decoded Claims</h4>
-    <pre>{{ tokenPayload | json }}</pre>
+
+<!-- Main tabs: Basics / JWT Lab -->
+<div class="tabs">
+  <div class="tab-list">
+    <button *ngFor="let t of mainTabs"
+            class="tab"
+            [class.active]="selectedMainTab===t.id"
+            (click)="selectMainTab(t.id)">{{ t.label }}</button>
   </div>
-  <div *ngIf="tokenValidation">
-    <h3>Token Validation</h3>
-    <pre>{{ tokenValidation | json }}</pre>
+
+  <!-- Basics tab content (existing functionality) -->
+  <div class="tab-content" *ngIf="selectedMainTab==='basics'">
+    <h2>Basics</h2>
+    <p>API health via UI proxy:</p>
+    <pre>{{ health | json }}</pre>
+    <div *ngIf="loggedIn">
+      <p class="spaced">
+        <a [href]="accountUrl" target="_blank" rel="noopener noreferrer">Open Account Console</a>
+      </p>
+      <p>
+        <button (click)="validateToken()" [disabled]="!accessToken || authMode!=='plain'">Validate Token</button>
+        <button (click)="fetchRss" [disabled]="!accessToken || authMode!=='plain'">Fetch RSS</button>
+        <button (click)="toggleToken()" [disabled]="!accessToken">{{ showToken ? 'Hide' : 'Show' }} Token</button>
+        <button (click)="copyToken()" [disabled]="!accessToken || authMode!=='plain'">Copy Token</button>
+        <button (click)="adminPing()" [disabled]="!accessToken || authMode!=='plain'">Admin Ping</button>
+      </p>
+      <p *ngIf="accessTokenExp">
+        Token expires at: {{ accessTokenExp * 1000 | date:'medium' }}
+      </p>
+      <div *ngIf="showToken && accessToken">
+        <h3>Access Token (debug)</h3>
+        <textarea rows="6" readonly>{{ accessToken }}</textarea>
+        <h4>Decoded Claims</h4>
+        <pre>{{ tokenPayload | json }}</pre>
+      </div>
+      <div *ngIf="tokenValidation">
+        <h3>Token Validation</h3>
+        <pre>{{ tokenValidation | json }}</pre>
+      </div>
+      <div *ngIf="rss">
+        <h3>RSS (via API)</h3>
+        <pre>{{ rss | json }}</pre>
+      </div>
+      <div *ngIf="adminPingStatus !== null">
+        <h3>Admin Ping</h3>
+        <p>Status: {{ adminPingStatus }}</p>
+        <pre>{{ adminPingResponse | json }}</pre>
+      </div>
+    </div>
+    <div *ngIf="error" class="error">{{ error }}</div>
   </div>
-  <div *ngIf="rss">
-    <h3>RSS (via API)</h3>
-    <pre>{{ rss | json }}</pre>
+
+<hr />
+  <!-- JWT Lab tabs grouped under main tab -->
+  <div class="tab-content" *ngIf="selectedMainTab==='jwt-lab'">
+    <h2>JWT Lab</h2>
+
+<div class="tabs">
+  <div class="tab-list">
+    <button *ngFor="let t of labTabs"
+            class="tab"
+            [class.active]="selectedLabTab===t.id"
+            (click)="selectLabTab(t.id)">
+      {{ t.label }}
+      <span *ngIf="!t.ready" title="Coming soon">(soon)</span>
+    </button>
   </div>
-  <div *ngIf="adminPingStatus !== null">
-    <h3>Admin Ping</h3>
-    <p>Status: {{ adminPingStatus }}</p>
-    <pre>{{ adminPingResponse | json }}</pre>
+
+  <!-- HS256 (basic) tab -->
+  <div class="tab-content" *ngIf="selectedLabTab==='hs256-basic'">
+    <h3>HS256 (Basic)</h3>
+    <div class="warning">
+      Educational only: HS256 in-browser puts the signing secret in JS.
+      Real IdPs (e.g., Keycloak) sign tokens server-side (RS256). We use HS256 here
+      to make JWT structure and signing tangible in one page.
+    </div>
+    <p class="spaced">
+      This tab helps you see how a JWT is formed: base64url(header).base64url(payload).base64url(signature),
+      and what an HMAC signature actually covers. Do not use browser-side HS256 for production auth.
+    </p>
+    <div>
+      <label>Secret:&nbsp;</label>
+      <input type="text" [(ngModel)]="labSecret" placeholder="secret" style="width: 240px;" />
+    </div>
+    <div>
+      <label>Payload (JSON):</label>
+      <textarea rows="6" [(ngModel)]="labPayloadText" placeholder='{"sub":"123","name":"Alice"}'></textarea>
+    </div>
+    <p>
+      <button (click)="labGenerate()">Generate JWT (HS256)</button>
+    </p>
+    <div>
+      <label>Token:</label>
+      <textarea rows="4" [(ngModel)]="labInput" placeholder="<header>.<payload>.<signature>"></textarea>
+    </div>
+    <p>
+      <button (click)="labDecode()">Decode</button>
+      <button (click)="labVerifyNow()">Verify (HS256)</button>
+      <span *ngIf="labVerify !== null" [style.color]="labVerify ? 'green' : 'crimson'">{{ labVerify ? 'signature valid' : 'invalid signature' }}</span>
+      <span *ngIf="labError" class="error" style="margin-left: 12px;">{{ labError }}</span>
+    </p>
+    <p class="spaced">
+      <a href="https://www.jwt.io/" target="_blank" rel="noopener noreferrer">Open jwt.io (decode/inspect)</a>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>Decoded Header</h4>
+        <pre>{{ labDecodedHeader | json }}</pre>
+      </div>
+      <div>
+        <h4>Decoded Payload</h4>
+        <pre>{{ labDecodedPayload | json }}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- RS256 + JWKS placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='rs256-jwks'">
+    <h3>RS256 + JWKS</h3>
+    <p>Coming soon: decode a Keycloak access token, extract <code>kid</code>, fetch JWKS, and verify RS256 signatures in the browser (dev-only). This mirrors how your API validates tokens server-side.</p>
+  </div>
+
+  <!-- OIDC Code+PKCE placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='oidc-pkce'">
+    <h3>OIDC Code + PKCE</h3>
+    <p>Coming soon: step through the browser code flow, show <code>code_verifier</code>/<code>code_challenge</code>, and capture tokens after the token endpoint exchange.</p>
+  </div>
+
+  <!-- Interceptor: Attach placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='interceptor'">
+    <h3>HTTP Interceptor: Attach</h3>
+    <p>Coming soon: allowlist API origins and automatically attach <code>Authorization: Bearer &lt;access_token&gt;</code> to API calls.</p>
+  </div>
+
+  <!-- Refresh flow placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='refresh'">
+    <h3>401 → Refresh → Retry</h3>
+    <p>Coming soon: single refresh-in-flight guard, queue concurrent requests, and safe retry logic without loops or storms.</p>
+  </div>
+
+  <!-- Storage options placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='storage'">
+    <h3>Storage Options</h3>
+    <p>Coming soon: compare in-memory, sessionStorage, localStorage, and HttpOnly cookies (via BFF) with their tradeoffs and XSS/CSRF implications.</p>
+  </div>
+
+  <!-- Idle vs Expiry placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='idle'">
+    <h3>Idle vs Expiration</h3>
+    <p>Coming soon: show token expiration vs user idle session timers and how to implement idle logout UX.</p>
+  </div>
+
+  <!-- Multi-tab sync placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='multitab'">
+    <h3>Multi-Tab Sync</h3>
+    <p>Coming soon: coordinate auth state with BroadcastChannel, avoid refresh races, and propagate logout.</p>
+  </div>
   </div>
 </div>
-<div *ngIf="error" class="error">{{ error }}</div>

@@ -28,10 +28,8 @@ export async function computeCodeChallenge(verifier: string): Promise<string> {
 export function decodeJwt(token: string | null): any {
   if (!token) return null;
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(json);
+    const { payload } = decodeJwtParts(token);
+    return payload ?? null;
   } catch {
     return null;
   }
@@ -40,4 +38,86 @@ export function decodeJwt(token: string | null): any {
 export function decodeJwtExp(token: string | null): number | null {
   const payload = decodeJwt(token);
   return payload && typeof payload.exp === 'number' ? payload.exp : null;
+}
+
+// ---------- Basic JWT (HS256) helpers for lab (no external libraries) ----------
+
+function fromBase64Url(b64u: string): Uint8Array {
+  const pad = b64u.length % 4 === 2 ? '==' : b64u.length % 4 === 3 ? '=' : '';
+  const b64 = b64u.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function toUtf8Bytes(str: string): Uint8Array {
+  return new TextEncoder().encode(str);
+}
+
+function jsonToBase64Url(obj: any): string {
+  const json = JSON.stringify(obj);
+  return toBase64Url(toUtf8Bytes(json));
+}
+
+export function base64UrlEncodeString(str: string): string {
+  return toBase64Url(toUtf8Bytes(str));
+}
+
+export function base64UrlDecodeToString(b64u: string): string {
+  const bytes = fromBase64Url(b64u);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+  return out;
+}
+
+export function decodeJwtParts(token: string): { header: any | null; payload: any | null; signature: string | null } {
+  try {
+    const [h, p, s] = token.split('.');
+    if (!h || !p || !s) return { header: null, payload: null, signature: null };
+    const header = JSON.parse(base64UrlDecodeToString(h));
+    const payload = JSON.parse(base64UrlDecodeToString(p));
+    return { header, payload, signature: s };
+  } catch {
+    return { header: null, payload: null, signature: null };
+  }
+}
+
+function ensureArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  return ab;
+}
+
+async function hmacSignSha256(keyBytes: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  const keyAb: ArrayBuffer = ensureArrayBuffer(keyBytes);
+  const dataAb: ArrayBuffer = ensureArrayBuffer(data);
+  const key = await crypto.subtle.importKey('raw', keyAb, { name: 'HMAC', hash: 'SHA-256' } as HmacImportParams, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, dataAb);
+  return new Uint8Array(sig as ArrayBuffer);
+}
+
+export async function createJwtHS256(payload: any, secret: string, header: Record<string, any> = {}): Promise<string> {
+  const hdr = { alg: 'HS256', typ: 'JWT', ...header };
+  const headerB64 = jsonToBase64Url(hdr);
+  const payloadB64 = jsonToBase64Url(payload);
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const sigBytes = await hmacSignSha256(toUtf8Bytes(secret), toUtf8Bytes(signingInput));
+  const sigB64 = toBase64Url(sigBytes);
+  return `${signingInput}.${sigB64}`;
+}
+
+export async function verifyJwtHS256(token: string, secret: string): Promise<{ valid: boolean; header: any | null; payload: any | null }>{
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return { valid: false, header: null, payload: null };
+    const [h, p, s] = parts;
+    const signingInput = `${h}.${p}`;
+    const expected = await hmacSignSha256(toUtf8Bytes(secret), toUtf8Bytes(signingInput));
+    const expectedB64 = toBase64Url(expected);
+    const { header, payload } = decodeJwtParts(token);
+    return { valid: s === expectedB64, header, payload };
+  } catch {
+    return { valid: false, header: null, payload: null };
+  }
 }
