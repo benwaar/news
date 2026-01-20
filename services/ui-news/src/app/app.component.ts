@@ -56,12 +56,13 @@ export class AppComponent {
   labTabs = [
     { id: 'hs256-basic', label: 'HS256 (basic)', ready: true },
     { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: true },
-    { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: false },
+    { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: true },
     { id: 'interceptor', label: 'Interceptor: Attach', ready: false },
     { id: 'refresh', label: '401→Refresh→Retry', ready: false },
     { id: 'storage', label: 'Storage Options', ready: false },
     { id: 'idle', label: 'Idle vs Expiry', ready: false },
     { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
+    { id: 'silent', label: 'Silent Re-auth', ready: false },
   ];
   selectedLabTab = 'hs256-basic';
 
@@ -91,6 +92,9 @@ export class AppComponent {
   rsError = '';
   rsJwks: JsonWebKey[] = [];
 
+  // OIDC Code + PKCE (lab) debug state
+  pkceDebug: any = null;
+
   constructor(){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
@@ -110,6 +114,7 @@ export class AppComponent {
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.loadPkceDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -121,6 +126,7 @@ export class AppComponent {
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.updateBasicsDerived();
+      this.loadPkceDebug();
     });
   }
 
@@ -144,6 +150,7 @@ export class AppComponent {
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.loadPkceDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -154,6 +161,7 @@ export class AppComponent {
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.updateBasicsDerived();
+      this.loadPkceDebug();
     });
   }
 
@@ -257,6 +265,18 @@ export class AppComponent {
 
   selectMainTab(id: string) {
     this.selectedMainTab = id;
+  }
+
+  // ----- OIDC Code + PKCE (lab) -----
+  loadPkceDebug() {
+    try {
+      const anyProvider: any = this.provider as any;
+      if (typeof anyProvider.getPkceDebug === 'function') {
+        this.pkceDebug = anyProvider.getPkceDebug();
+      }
+    } catch (e) {
+      this.error = 'PKCE debug failed: ' + String(e);
+    }
   }
 
   private stopAccessCountdown() {

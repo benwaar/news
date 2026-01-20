@@ -10,6 +10,12 @@ export class PlainAuthProvider implements AuthProvider {
   private tokenPayload: any = null;
   private tokenTimer: any = null;
   private subscribers: Array<(s: AuthState) => void> = [];
+  // Dev-only PKCE + flow debug
+  private pkceVerifier: string | null = null;
+  private pkceChallenge: string | null = null;
+  private lastAuthUrl: string | null = null;
+  private lastTokenRequest: Record<string, string> | null = null;
+  private lastTokenResponse: any = null;
 
   async init(config: AuthConfig): Promise<AuthState> {
     this.cfg = config;
@@ -18,6 +24,15 @@ export class PlainAuthProvider implements AuthProvider {
       const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
       this.apiBase = port === '4200' ? 'https://localhost' : '';
     } catch (_) { this.apiBase = ''; }
+    // Load PKCE verifier (if present) and compute challenge for display
+    try {
+      const storedVerifier = sessionStorage.getItem(pkceKey(this.cfg.realm, this.cfg.clientId));
+      if (storedVerifier) {
+        this.pkceVerifier = storedVerifier;
+        // compute challenge for lab display
+        computeCodeChallenge(storedVerifier).then(ch => { this.pkceChallenge = ch; }).catch(() => {});
+      }
+    } catch (_) {}
     try {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
@@ -50,13 +65,16 @@ export class PlainAuthProvider implements AuthProvider {
 
   login(): void {
     const codeVerifier = generateCodeVerifier();
+    this.pkceVerifier = codeVerifier;
     computeCodeChallenge(codeVerifier).then(codeChallenge => {
+      this.pkceChallenge = codeChallenge;
       try { sessionStorage.setItem(pkceKey(this.cfg.realm, this.cfg.clientId), codeVerifier); } catch (_) {}
       const url = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/auth` +
         `?client_id=${encodeURIComponent(this.cfg.clientId)}` +
         `&redirect_uri=${encodeURIComponent(this.cfg.redirectUri)}` +
         `&response_type=code&scope=${encodeURIComponent('openid profile email')}` +
         `&code_challenge_method=S256&code_challenge=${encodeURIComponent(codeChallenge)}`;
+      this.lastAuthUrl = url;
       window.location.href = url;
     });
   }
@@ -132,6 +150,13 @@ export class PlainAuthProvider implements AuthProvider {
     body.set('code', code);
     body.set('redirect_uri', this.cfg.redirectUri);
     body.set('code_verifier', verifier);
+    this.lastTokenRequest = {
+      grant_type: 'authorization_code',
+      client_id: this.cfg.clientId,
+      code,
+      redirect_uri: this.cfg.redirectUri,
+      code_verifier: verifier,
+    };
     const tokenUrl = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/token`;
     const resp = await fetch(tokenUrl, {
       method: 'POST',
@@ -143,6 +168,7 @@ export class PlainAuthProvider implements AuthProvider {
       throw new Error(`Token endpoint ${resp.status}: ${txt}`);
     }
     const json = await resp.json();
+    this.lastTokenResponse = json;
     this.accessToken = json.access_token || null;
     this.accessTokenExp = decodeJwtExp(this.accessToken);
     this.tokenPayload = decodeJwt(this.accessToken);
@@ -172,5 +198,18 @@ export class PlainAuthProvider implements AuthProvider {
       clearInterval(this.tokenTimer);
       this.tokenTimer = null;
     }
+  }
+
+  // Dev-only: expose PKCE and flow details for the lab UI
+  getPkceDebug(): any {
+    return {
+      mode: 'plain',
+      verifier: this.pkceVerifier,
+      challenge: this.pkceChallenge,
+      challenge_method: this.pkceChallenge ? 'S256' : null,
+      auth_url: this.lastAuthUrl,
+      token_request: this.lastTokenRequest,
+      token_response: this.lastTokenResponse,
+    };
   }
 }

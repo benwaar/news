@@ -225,7 +225,72 @@
   <!-- OIDC Code+PKCE placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='oidc-pkce'">
     <h3>OIDC Code + PKCE</h3>
-    <p>Coming soon: step through the browser code flow, show <code>code_verifier</code>/<code>code_challenge</code>, and capture tokens after the token endpoint exchange.</p>
+    <div class="warning">Dev-only introspection of the Code+PKCE flow. Real apps should not expose these values in production.</div>
+    <div class="info-panel">
+      <h4>What you'll see</h4>
+      <ul>
+        <li><strong>code_verifier</strong>: generated in the browser and stored in sessionStorage.</li>
+        <li><strong>code_challenge (S256)</strong>: derived from the verifier; sent to the auth endpoint.</li>
+        <li><strong>Auth URL</strong>: the computed authorization request (includes challenge).</li>
+        <li><strong>Token request</strong>: POST params to the token endpoint including verifier.</li>
+        <li><strong>Token response</strong>: JSON returned (e.g., <em>access_token</em>, <em>id_token</em> if present).</li>
+      </ul>
+      <p>
+        This tab exposes the <em>normally invisible</em> parts of the browser OIDC flow so you can build intuition:
+        how the client creates a <strong>code_verifier</strong>, commits to it via a <strong>code_challenge</strong>,
+        and later proves possession of the verifier to the token endpoint. Seeing the exact auth URL and token request
+        helps debug misconfigurations (redirect URIs, scopes, client IDs) and verify that PKCE is truly in effect.
+      </p>
+      <h4>What is PKCE?</h4>
+      <p>
+        <strong>Proof Key for Code Exchange (PKCE)</strong> binds the authorization code to your browser session.
+        The SPA generates a random <em>code_verifier</em> and sends a derived <em>code_challenge</em> (S256) with the
+        initial auth request. Later, the token endpoint requires the original verifier to exchange the code. If an
+        attacker intercepts the authorization code, they still can’t redeem it without your verifier.
+        PKCE is required for public clients (SPAs) and removes the need for a client secret in the browser.
+      </p>
+      <h4>Why we do it</h4>
+      <ul>
+        <li><strong>Verify PKCE binding</strong>: confirm the server requires the same <em>code_verifier</em> that produced the challenge (prevents intercepted authorization code replay).</li>
+        <li><strong>Debug the flow</strong>: quickly spot wrong realm/client IDs, missing scopes, or redirect URI mismatches.</li>
+        <li><strong>Understand token types</strong>: differentiate <em>access_token</em> (for APIs) from <em>id_token</em> (for client UI).</li>
+        <li><strong>Observe timings</strong>: relate login redirects, token issuance, and token expiration to real UX.</li>
+        <li><strong>Production hygiene</strong>: learn what to <em>never</em> log or expose in prod (verifiers, full tokens).</li>
+      </ul>
+      <h4>Where it fits in the browser flow</h4>
+      <ol>
+        <li><strong>SPA starts</strong>: generate a <em>code_verifier</em>; derive <em>code_challenge</em> (S256).</li>
+        <li><strong>Auth request</strong>: redirect to the realm’s auth endpoint with client ID, redirect URI, scopes, and the challenge.</li>
+        <li><strong>Login at IdP</strong>: user authenticates (and consents if required).</li>
+        <li><strong>Redirect back</strong>: IdP returns an <em>authorization code</em> to the SPA’s redirect URI.</li>
+        <li><strong>Token exchange</strong>: SPA POSTs the code and <em>code_verifier</em> to the token endpoint; server verifies it matches the earlier challenge.</li>
+        <li><strong>Tokens issued</strong>: receive <em>access_token</em> (and possibly <em>id_token</em>); store access token per your strategy (here: sessionStorage).</li>
+        <li><strong>API calls</strong>: attach <code>Authorization: Bearer &lt;access_token&gt;</code> to calls (through the UI gateway proxy to <em>news-api</em>).</li>
+        <li><strong>Expiration/Logout</strong>: when the token expires, prompt re-login (or refresh if implemented); logout clears local state and calls the realm logout endpoint.</li>
+      </ol>
+    </div>
+    <p>
+      <button (click)="loadPkceDebug()">Refresh PKCE Details</button>
+      <button (click)="login()" [disabled]="authMode!=='plain'">Start Login (Code+PKCE)</button>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>PKCE Inputs</h4>
+        <ul>
+          <li>code_verifier: <strong>{{ pkceDebug?.verifier || 'n/a' }}</strong></li>
+          <li>code_challenge: <strong>{{ pkceDebug?.challenge || 'n/a' }}</strong></li>
+          <li>method: <strong>{{ pkceDebug?.challenge_method || 'n/a' }}</strong></li>
+        </ul>
+        <h4>Auth Request</h4>
+        <pre>{{ pkceDebug?.auth_url || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Token Request (POST)</h4>
+        <pre>{{ pkceDebug?.token_request | json }}</pre>
+        <h4>Token Response</h4>
+        <pre>{{ pkceDebug?.token_response | json }}</pre>
+      </div>
+    </div>
   </div>
 
   <!-- Interceptor: Attach placeholder -->
@@ -256,6 +321,28 @@
   <div class="tab-content" *ngIf="selectedLabTab==='multitab'">
     <h3>Multi-Tab Sync</h3>
     <p>Coming soon: coordinate auth state with BroadcastChannel, avoid refresh races, and propagate logout.</p>
+  </div>
+
+  <!-- Silent re-auth placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='silent'">
+    <h3>Silent Re-auth (prompt=none)</h3>
+    <div class="warning">Dev-only: Attempt background re-auth when the IdP session is still valid.</div>
+    <div class="info-panel">
+      <p>
+        Silent re-auth uses an off-screen frame to call the authorization endpoint with <code>prompt=none</code>.
+        If the user still has a valid SSO session at the IdP, the realm can issue a new authorization code without
+        UI, which the SPA exchanges for fresh tokens. This avoids interrupting the user when access tokens expire.
+      </p>
+      <h4>Constraints</h4>
+      <ul>
+        <li>CORS and cookies must permit the IdP to recognize the session.</li>
+        <li>IdP config must allow <em>prompt=none</em> and the redirect context.</li>
+        <li>Failure should gracefully fall back to interactive login.</li>
+      </ul>
+    </div>
+    <p>
+      Coming soon: a minimal iframe flow and safe failure handling.
+    </p>
   </div>
   </div>
 </div>
