@@ -59,6 +59,25 @@
             <li>[aud] Audience: <strong>{{ basicsClaims.aud ? basicsClaims.aud.join(', ') : 'n/a' }}</strong></li>
             <li>[sub] Subject present: <strong [style.color]="basicsClaims.subOk ? 'green' : 'crimson'">{{ basicsClaims.subOk ? 'yes' : 'no' }}</strong></li>
             <li>[exp] Expires valid (not expired): <strong [style.color]="basicsClaims.expOk ? 'green' : 'crimson'">{{ basicsClaims.expOk ? 'yes' : 'no' }}</strong></li>
+          <div class="info-panel">
+            <p>
+              Interceptor attached Authorization? <strong>{{ intAttached ? 'Yes' : 'No' }}</strong>
+              <span *ngIf="intLastUrl">(last URL: <code>{{ intLastUrl }}</code>)</span>
+            </p>
+            <p *ngIf="intLastToken">
+              <button (click)="intShowAttachedToken = !intShowAttachedToken">
+                {{ intShowAttachedToken ? 'Hide' : 'Show' }} attached token
+              </button>
+            </p>
+            <div *ngIf="intShowAttachedToken && intLastToken">
+              <h4>Attached Token</h4>
+              <pre>{{ intLastToken }}</pre>
+            </div>
+            <div *ngIf="intLastHeader">
+              <h4>Authorization Header</h4>
+              <pre>{{ intLastHeader }}</pre>
+            </div>
+          </div>
             <li>Roles/Groups: <strong>{{ basicsClaims.roles ? basicsClaims.roles.join(', ') : 'n/a' }}</strong></li>
           </ul>
         </div>
@@ -296,7 +315,58 @@
   <!-- Interceptor: Attach placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='interceptor'">
     <h3>HTTP Interceptor: Attach</h3>
-    <p>Coming soon: allowlist API origins and automatically attach <code>Authorization: Bearer &lt;access_token&gt;</code> to API calls.</p>
+    <div class="info-panel">
+      <p>
+        This demo uses an Angular <strong>HttpInterceptor</strong> to automatically attach
+        <code>Authorization: Bearer &lt;access_token&gt;</code> to allowlisted API calls (e.g. <code>/api/*</code>).
+        The token is read from sessionStorage where the plain PKCE login stored it.
+      </p>
+      <ul>
+        <li><strong>Allowlist</strong>: only relative <code>/api/...</code> or absolute <code>https://localhost/api/...</code>.</li>
+        <li><strong>Source</strong>: token from <em>sessionStorage</em> key <code>token:news:news-web</code>.</li>
+        <li><strong>Scope</strong>: Interceptor affects Angular <em>HttpClient</em> calls only (not <em>fetch()</em>).</li>
+      </ul>
+      <div class="warning">Interceptor applies <strong>only</strong> to Angular <em>HttpClient</em>.
+        Calls made with <em>fetch()</em> do <strong>not</strong> use the interceptor and will not have the header automatically attached.
+        Use the buttons below (HttpClient) to see the attached <code>Authorization</code> header.
+      </div>
+    </div>
+    <p>
+      <button (click)="intHealthzHttp()">Healthz via HttpClient</button>
+      <br>
+      <button (click)="intValidateToken()" [disabled]="!loggedIn">Validate via HttpClient</button>
+      <button (click)="intFetchRss()" [disabled]="!loggedIn">Fetch RSS via HttpClient</button>
+    </p>
+    <div class="info-panel">
+      <p>
+        Interceptor attached Authorization? <strong>{{ intAttached ? 'Yes' : 'No' }}</strong>
+        <span *ngIf="intLastUrl">(last URL: <code>{{ intLastUrl }}</code>)</span>
+      </p>
+      <p *ngIf="intLastToken">
+        <!-- Attached token toggle removed (redundant with header display) -->
+      </p>
+      <div *ngIf="intLastHeader">
+        <h4>Authorization Header</h4>
+        <pre>{{ intLastHeader }}</pre>
+      </div>
+    </div>
+    <div *ngIf="intValidation">
+      <h4>Validation (interceptor)</h4>
+      <pre>{{ intValidation | json }}</pre>
+    </div>
+    <div *ngIf="intRss">
+      <h4>RSS (interceptor)</h4>
+      <pre>{{ intRss | json }}</pre>
+    </div>
+    <div *ngIf="intAdminStatus !== null">
+      <h4>Admin Ping (interceptor)</h4>
+      <p>Status: {{ intAdminStatus }}</p>
+      <pre>{{ intAdminBody | json }}</pre>
+    </div>
+    <div *ngIf="intHealthz">
+      <h4>Healthz (interceptor)</h4>
+      <pre>{{ intHealthz | json }}</pre>
+    </div>
   </div>
 
   <!-- Refresh flow placeholder -->

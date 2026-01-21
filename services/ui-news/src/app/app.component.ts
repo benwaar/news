@@ -1,7 +1,9 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
+import { AuthTokenService } from './auth/token.service';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
 import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles, fetchRealmJwks, verifyJwtRS256WithJwk } from './utils';
 
@@ -57,7 +59,7 @@ export class AppComponent {
     { id: 'hs256-basic', label: 'HS256 (basic)', ready: true },
     { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: true },
     { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: true },
-    { id: 'interceptor', label: 'Interceptor: Attach', ready: false },
+    { id: 'interceptor', label: 'Interceptor: Attach', ready: true },
     { id: 'refresh', label: '401→Refresh→Retry', ready: false },
     { id: 'storage', label: 'Storage Options', ready: false },
     { id: 'idle', label: 'Idle vs Expiry', ready: false },
@@ -95,7 +97,19 @@ export class AppComponent {
   // OIDC Code + PKCE (lab) debug state
   pkceDebug: any = null;
 
-  constructor(){
+  // Interceptor lab state
+  intTokenAttached = false; // quick probe after a call
+  intValidation: any = null;
+  intRss: any = null;
+  intAdminStatus: number | null = null;
+  intAdminBody: any = null;
+  // Interceptor debug panel
+  intAttached: boolean = false;
+  intLastUrl: string | null = null;
+  intLastHeader: string | null = null;
+  intHealthz: any = null;
+
+  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     this.isDev = this.currentPort === '4200';
@@ -111,6 +125,7 @@ export class AppComponent {
     this.provider.init(cfg).then(state => {
       this.loggedIn = state.loggedIn;
       this.accessToken = state.accessToken;
+      this.authTokenSvc.setToken(this.accessToken);
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
@@ -122,6 +137,7 @@ export class AppComponent {
     this.provider.subscribe(state => {
       this.loggedIn = state.loggedIn;
       this.accessToken = state.accessToken;
+      this.authTokenSvc.setToken(this.accessToken);
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
@@ -151,6 +167,7 @@ export class AppComponent {
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -162,6 +179,7 @@ export class AppComponent {
       this.error = state.error || '';
       this.updateBasicsDerived();
       this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     });
   }
 
@@ -374,5 +392,62 @@ export class AppComponent {
     } catch (e) {
       this.rsError = 'Verify failed: ' + String(e);
     }
+  }
+
+  // ----- Interceptor lab: call APIs via Angular HttpClient -----
+  async intValidateToken() {
+    try {
+      const resp = await this.http.get('/api/token/validate', { observe: 'response' }).toPromise();
+      this.intTokenAttached = !!resp?.headers.get('x-token-attached'); // optional if API echoes; else keep false
+      this.intValidation = resp?.body ?? null;
+    } catch (e: any) {
+      this.intValidation = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async intFetchRss() {
+    try {
+      const body = await this.http.get('/api/rss').toPromise();
+      this.intRss = body ?? null;
+    } catch (e: any) {
+      this.intRss = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async intAdminPing() {
+    this.intAdminStatus = null;
+    this.intAdminBody = null;
+    try {
+      const resp = await this.http.get('/api/admin/ping', { observe: 'response' }).toPromise();
+      this.intAdminStatus = resp?.status ?? null;
+      this.intAdminBody = resp?.body ?? null;
+    } catch (e: any) {
+      // Angular throws on non-2xx; capture status/body if present
+      if (e?.status) {
+        this.intAdminStatus = e.status;
+        this.intAdminBody = e.error ?? e.message;
+      } else {
+        this.intAdminBody = { error: String(e?.message ?? e) };
+      }
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async intHealthzHttp() {
+    try {
+      const body = await this.http.get('/api/healthz').toPromise();
+      this.intHealthz = body ?? null;
+    } catch (e: any) {
+      this.intHealthz = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  private refreshInterceptorDebug() {
+    this.intAttached = this.authTokenSvc.getLastAttached();
+    this.intLastUrl = this.authTokenSvc.getLastUrl();
+    this.intLastHeader = this.authTokenSvc.getLastAuthHeader();
   }
 }
