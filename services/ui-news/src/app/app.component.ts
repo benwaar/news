@@ -4,7 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
 import { AuthTokenService } from './auth/token.service';
+import { tokenKey, refreshKey } from './auth/storage';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
+import { RefreshService } from './auth/refresh.service';
 import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles, fetchRealmJwks, verifyJwtRS256WithJwk } from './utils';
 
 @Component({
@@ -60,7 +62,7 @@ export class AppComponent {
     { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: true },
     { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: true },
     { id: 'interceptor', label: 'Interceptor: Attach', ready: true },
-    { id: 'refresh', label: '401→Refresh→Retry', ready: false },
+    { id: 'refresh', label: '401→Refresh→Retry', ready: true },
     { id: 'storage', label: 'Storage Options', ready: false },
     { id: 'idle', label: 'Idle vs Expiry', ready: false },
     { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
@@ -108,8 +110,11 @@ export class AppComponent {
   intLastUrl: string | null = null;
   intLastHeader: string | null = null;
   intHealthz: any = null;
+  // Refresh tab token view
+  refreshAccessToken: string | null = null;
+  refreshRefreshToken: string | null = null;
 
-  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService){
+  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     this.isDev = this.currentPort === '4200';
@@ -130,6 +135,7 @@ export class AppComponent {
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -143,6 +149,7 @@ export class AppComponent {
       this.error = state.error || '';
       this.updateBasicsDerived();
       this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     });
   }
 
@@ -415,6 +422,37 @@ export class AppComponent {
     }
     this.refreshInterceptorDebug();
   }
+  // ----- Refresh demo helpers -----
+  forceExpireToken() {
+    // Simulate an expired/invalid access token so interceptor attaches it,
+    // receives 401, then triggers refresh using the stored refresh_token.
+    try {
+      const key = 'token:news:news-web';
+      sessionStorage.setItem(key, 'invalid');
+      this.authTokenSvc.setToken('invalid');
+      this.error = '';
+    } catch (_) {}
+    this.refreshInterceptorDebug();
+  }
+
+  async intFetchRssRefreshDemo() {
+    // Same endpoint as intFetchRss, but leave state separate for clarity
+    try {
+      const body = await this.http.get('/api/rss').toPromise();
+      this.intRss = body ?? null;
+    } catch (e: any) {
+      this.intRss = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async rotateRefreshTokenNow() {
+    // Proactively call refresh grant to rotate tokens without forcing a 401
+    try {
+      await this.refreshSvc.refresh();
+    } catch (_) {}
+    this.refreshInterceptorDebug();
+  }
 
   async intAdminPing() {
     this.intAdminStatus = null;
@@ -449,5 +487,12 @@ export class AppComponent {
     this.intAttached = this.authTokenSvc.getLastAttached();
     this.intLastUrl = this.authTokenSvc.getLastUrl();
     this.intLastHeader = this.authTokenSvc.getLastAuthHeader();
+    // Update Refresh tab token view
+    try {
+      const tKey = tokenKey(this.realm, this.clientId);
+      const rKey = refreshKey(this.realm, this.clientId);
+      this.refreshAccessToken = sessionStorage.getItem(tKey);
+      this.refreshRefreshToken = sessionStorage.getItem(rKey);
+    } catch (_) {}
   }
 }

@@ -1,7 +1,9 @@
-import { HttpInterceptorFn } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { tokenKey } from './storage';
 import { AuthTokenService } from './token.service';
+import { RefreshService } from './refresh.service';
+import { catchError, switchMap, throwError, from } from 'rxjs';
 
 // Simple allowlist: only attach Authorization to our API gateway paths.
 const ALLOWLIST = [
@@ -39,7 +41,25 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     });
     try { tokenSvc.markAttached(url, token); } catch (_) {}
     debugger; // Dev: pause here to verify interceptor path
-    return next(authReq);
+    const refresher = inject(RefreshService);
+    return next(authReq).pipe(
+      catchError((err) => {
+        if (err instanceof HttpErrorResponse && err.status === 401) {
+          return from(refresher.refresh()).pipe(
+            switchMap((newToken) => {
+              if (newToken) {
+                const retryReq = req.clone({
+                  setHeaders: { Authorization: `Bearer ${newToken}` }
+                });
+                return next(retryReq);
+              }
+              return throwError(() => err);
+            })
+          );
+        }
+        return throwError(() => err);
+      })
+    );
   } catch (_) {
     return next(req);
   }

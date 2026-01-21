@@ -372,7 +372,53 @@
   <!-- Refresh flow placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='refresh'">
     <h3>401 → Refresh → Retry</h3>
-    <p>Coming soon: single refresh-in-flight guard, queue concurrent requests, and safe retry logic without loops or storms.</p>
+    <div class="info-panel">
+      <p>
+        When a protected HTTP call returns <strong>401 Unauthorized</strong>, the interceptor will attempt a
+        <strong>refresh_token</strong> exchange. On success, it retries the original request with the new
+        <code>Authorization</code> header. A single refresh is kept <em>in-flight</em> to prevent storms,
+        and concurrent requests wait for the outcome.
+      </p>
+      <ul>
+        <li><strong>Demo</strong>: simulate an <em>expired/invalid</em> access token, then call a protected endpoint via HttpClient.</li>
+        <li><strong>Note</strong>: fetch() bypasses interceptors — use the buttons below.</li>
+      </ul>
+      <div class="warning">
+        Refresh helps when the <em>access token</em> is expired/invalid but a valid <em>refresh token</em> is still present.
+        It will <strong>not</strong> fix:<br>
+        — Missing bearer (no Authorization header attached)<br>
+        — Wrong issuer/audience claims<br>
+        — Malformed/unsigned tokens that your IdP rejects on refresh as well<br>
+        — Authorization failures like 403 (e.g., missing required realm roles)
+      </div>
+      <p>
+        The <strong>refresh token</strong> is used by the client (browser) to call the IdP’s token endpoint, not the API.
+        After a <em>401 Unauthorized</em> due to an expired access token, the client can refresh, get a new access token, and retry.
+      </p>
+      <p>
+        <strong>Why you rarely see it:</strong> Good UX proactively refreshes slightly before expiry (or uses silent re-auth),
+        so requests don’t collide with expiry.
+      </p>
+    </div>
+    <p>
+      <button (click)="forceExpireToken()">Simulate expired access token</button>
+      <button (click)="intFetchRssRefreshDemo()" [disabled]="!loggedIn">Fetch RSS via HttpClient (refresh demo)</button>
+      <button (click)="rotateRefreshTokenNow()" [disabled]="!loggedIn">Rotate tokens now (refresh grant)</button>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>Access Token (current)</h4>
+        <pre>{{ refreshAccessToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Refresh Token (current)</h4>
+        <pre>{{ refreshRefreshToken || 'n/a' }}</pre>
+      </div>
+    </div>
+    <div *ngIf="intRss">
+      <h4>RSS (after refresh)</h4>
+      <pre>{{ intRss | json }}</pre>
+    </div>
   </div>
 
   <!-- Storage options placeholder -->

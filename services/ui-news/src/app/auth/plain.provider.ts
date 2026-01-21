@@ -1,6 +1,6 @@
 import { AuthConfig, AuthProvider, AuthState } from './provider';
 import { computeCodeChallenge, decodeJwt, decodeJwtExp, generateCodeVerifier } from '../utils';
-import { pkceKey, tokenKey } from './storage';
+import { pkceKey, tokenKey, refreshKey } from './storage';
 
 export class PlainAuthProvider implements AuthProvider {
   private cfg!: AuthConfig;
@@ -84,6 +84,7 @@ export class PlainAuthProvider implements AuthProvider {
     try {
       sessionStorage.removeItem(pkceKey(this.cfg.realm, this.cfg.clientId));
       sessionStorage.removeItem(tokenKey(this.cfg.realm, this.cfg.clientId));
+      sessionStorage.removeItem(refreshKey(this.cfg.realm, this.cfg.clientId));
     } catch (_) {}
     const url = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/logout` +
       `?client_id=${encodeURIComponent(this.cfg.clientId)}` +
@@ -170,9 +171,13 @@ export class PlainAuthProvider implements AuthProvider {
     const json = await resp.json();
     this.lastTokenResponse = json;
     this.accessToken = json.access_token || null;
+    const refresh = json.refresh_token || null;
     this.accessTokenExp = decodeJwtExp(this.accessToken);
     this.tokenPayload = decodeJwt(this.accessToken);
-    try { if (this.accessToken) sessionStorage.setItem(tokenKey(this.cfg.realm, this.cfg.clientId), this.accessToken); } catch (_) {}
+    try {
+      if (this.accessToken) sessionStorage.setItem(tokenKey(this.cfg.realm, this.cfg.clientId), this.accessToken);
+      if (refresh) sessionStorage.setItem(refreshKey(this.cfg.realm, this.cfg.clientId), refresh);
+    } catch (_) {}
     this.startTokenExpiryWatcher();
     this.emit();
   }
