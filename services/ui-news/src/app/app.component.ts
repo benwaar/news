@@ -64,7 +64,7 @@ export class AppComponent {
     { id: 'interceptor', label: 'Interceptor: Attach', ready: true },
     { id: 'refresh', label: '401→Refresh→Retry', ready: true },
     { id: 'storage', label: 'Storage Options', ready: true },
-    { id: 'idle', label: 'Idle vs Expiry', ready: false },
+    { id: 'idle', label: 'Idle vs Expiry', ready: true },
     { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
     { id: 'silent', label: 'Silent Re-auth', ready: false },
   ];
@@ -121,6 +121,20 @@ export class AppComponent {
   storageSessionToken: string | null = null;
   storageLocalToken: string | null = null;
 
+  // Idle monitor state
+  idleEnabled = false;
+  idleTimeoutSec = 10; // default idle timeout seconds
+  idleWarnSeconds = 10; // show warning when remaining <= this
+  idleRemainingSec: number | null = null;
+  idleAutoLogout = false;
+  lastActivityAt: Date | null = null;
+  private idleTimer: any = null;
+  // Lab toggle: disable provider auto-logout on access expiry
+  disableExpiryLogout = true;
+  // Toast/banner for expiry notice
+  expiryToastVisible = false;
+  expiryToastMessage = 'Access token expired — will refresh on next API call.';
+
   constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
@@ -165,6 +179,13 @@ export class AppComponent {
       this.loadPkceDebug();
       this.refreshInterceptorDebug();
     });
+    // Load lab toggle from sessionStorage
+    try {
+      const v = sessionStorage.getItem('lab:disable-expiry-logout');
+      if (v === '0') this.disableExpiryLogout = false;
+      else if (v === '1') this.disableExpiryLogout = true;
+      else sessionStorage.setItem('lab:disable-expiry-logout', this.disableExpiryLogout ? '1' : '0');
+    } catch {}
   }
 
   onModeChange(evt: Event) {
@@ -339,6 +360,15 @@ export class AppComponent {
   private updateBasicsDerived() {
     // Update countdown
     this.startAccessCountdown();
+    // Toggle expiry toast when using lab mode (no auto-logout)
+    const remaining = this.accessTokenExpiresIn;
+    if (this.disableExpiryLogout && this.loggedIn && remaining === 0) {
+      this.expiryToastVisible = true;
+    } else if (typeof remaining === 'number' && remaining > 0) {
+      this.expiryToastVisible = false;
+    } else if (!this.loggedIn) {
+      this.expiryToastVisible = false;
+    }
     // Update header/claims
     this.accessHeader = this.accessToken ? decodeJwtParts(this.accessToken).header : null;
     const payload: any = this.tokenPayload || null;
@@ -530,6 +560,39 @@ export class AppComponent {
         } catch {}
         return original.apply(this, arguments as any);
       };
+      // Also hook fetch for completeness (if HttpClient ever uses fetch)
+      try {
+        const wAny: any = window as any;
+        const origFetch = wAny.fetch?.bind(window);
+        if (origFetch) {
+          wAny.fetch = function(input: any, init: any) {
+            try {
+              // Inspect headers from init or Request object
+              let headers: any = null;
+              if (init && init.headers) headers = init.headers;
+              else if (input && input.headers) headers = input.headers;
+              let auth: string | null = null;
+              if (headers) {
+                try {
+                  if (headers instanceof Headers) {
+                    auth = headers.get('Authorization');
+                  } else if (Array.isArray(headers)) {
+                    for (const [k, v] of headers) { if ((k || '').toLowerCase() === 'authorization') { auth = String(v); break; } }
+                  } else if (typeof headers === 'object') {
+                    for (const k of Object.keys(headers)) { if (k.toLowerCase() === 'authorization') { auth = String((headers as any)[k]); break; } }
+                  }
+                } catch {}
+              }
+              if (auth) {
+                // eslint-disable-next-line no-console
+                console.log('[demo-fetch-hook] captured header:', auth);
+                self.intLastHeader = `Authorization: ${auth}`;
+              }
+            } catch {}
+            return origFetch(input, init);
+          };
+        }
+      } catch {}
       this.headerHookEnabled = true;
       // Prepare environment for the demo: use memory, clear others, set in-memory token
       try {
@@ -538,9 +601,12 @@ export class AppComponent {
         try { localStorage.removeItem(key); } catch {}
         this.storageStrategy = 'memory';
         try { sessionStorage.setItem(STORAGE_STRATEGY_KEY, 'memory'); } catch {}
-        if (this.accessToken) {
-          this.authTokenSvc.setToken(this.accessToken);
-        }
+        // Seed a token into memory from best available source
+        let seed: string | null = this.accessToken || null;
+        try { if (!seed) seed = this.authTokenSvc.getToken(); } catch {}
+        try { if (!seed) seed = sessionStorage.getItem(key); } catch {}
+        try { if (!seed) seed = localStorage.getItem(key); } catch {}
+        if (seed) this.authTokenSvc.setToken(seed);
         this.storageRefreshView();
       } catch {}
     } catch {}
@@ -548,6 +614,7 @@ export class AppComponent {
 
   // Convenience: trigger a safe call to show the hook capturing Authorization
   runHookTestCall() {
+    if (!this.headerHookEnabled) this.runHeaderHook();
     this.intHealthzHttp();
   }
 
@@ -596,4 +663,81 @@ export class AppComponent {
       this.storageLocalToken = localStorage.getItem(key);
     } catch (_) {}
   }
+
+  // ---------- Idle monitor helpers ----------
+  private startIdleTimer() {
+    this.stopIdleTimer();
+    this.lastActivityAt = new Date();
+    this.idleRemainingSec = this.idleTimeoutSec;
+    this.idleTimer = setInterval(() => {
+      if (!this.lastActivityAt) return;
+      const elapsed = Math.floor((Date.now() - this.lastActivityAt.getTime()) / 1000);
+      const remaining = Math.max(this.idleTimeoutSec - elapsed, 0);
+      this.idleRemainingSec = remaining;
+      if (remaining === 0) {
+        this.stopIdleTimer();
+        if (this.idleAutoLogout && this.loggedIn) {
+          // Trigger provider logout once
+          try { this.logout(); } catch {}
+        }
+      }
+    }, 1000);
+  }
+
+  private stopIdleTimer() {
+    if (this.idleTimer) {
+      try { clearInterval(this.idleTimer); } catch {}
+      this.idleTimer = null;
+    }
+  }
+
+  private bindIdleActivityListeners() {
+    const handler = () => this.recordActivity();
+    window.addEventListener('mousemove', handler);
+    window.addEventListener('keydown', handler);
+    window.addEventListener('click', handler);
+    window.addEventListener('scroll', handler, { passive: true } as any);
+    window.addEventListener('touchstart', handler, { passive: true } as any);
+    // Store a reference to remove later
+    (this as any)._idleHandler = handler;
+  }
+
+  private unbindIdleActivityListeners() {
+    const handler = (this as any)._idleHandler;
+    if (!handler) return;
+    try {
+      window.removeEventListener('mousemove', handler);
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('click', handler);
+      window.removeEventListener('scroll', handler as any);
+      window.removeEventListener('touchstart', handler as any);
+    } catch {}
+    (this as any)._idleHandler = null;
+  }
+
+  idleToggle() {
+    this.idleEnabled = !this.idleEnabled;
+    if (this.idleEnabled) {
+      this.startIdleTimer();
+      this.bindIdleActivityListeners();
+    } else {
+      this.stopIdleTimer();
+      this.unbindIdleActivityListeners();
+      this.idleRemainingSec = null;
+    }
+  }
+
+  recordActivity() {
+    if (!this.idleEnabled) return;
+    this.lastActivityAt = new Date();
+    this.idleRemainingSec = this.idleTimeoutSec;
+  }
+
+  recordActivitySimulate() { this.recordActivity(); }
+
+  applyExpiryLogoutSetting() {
+    try { sessionStorage.setItem('lab:disable-expiry-logout', this.disableExpiryLogout ? '1' : '0'); } catch {}
+  }
+
+  dismissExpiryToast() { this.expiryToastVisible = false; }
 }

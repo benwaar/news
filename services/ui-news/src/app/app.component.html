@@ -450,7 +450,7 @@
       </ul>
       <p *ngIf="isDev">
         <button (click)="runHeaderHook()" [disabled]="headerHookEnabled">{{ headerHookEnabled ? 'XHR hook enabled' : 'Run demo XHR hook (dev)' }}</button>
-        <button (click)="runHookTestCall()" [disabled]="!headerHookEnabled || !loggedIn" style="margin-left:8px;">Run test call (Healthz)</button>
+        <button (click)="runHookTestCall()" style="margin-left:8px;">Run test call (Healthz)</button>
       </p>
       <pre>/* Example: log Authorization headers set on XHR (Angular HttpClient uses XHR) */
 const orig = XMLHttpRequest.prototype.setRequestHeader;
@@ -500,10 +500,54 @@ XMLHttpRequest.prototype.setRequestHeader = function(k, v) &#123;
     </div>
   </div>
 
-  <!-- Idle vs Expiry placeholder -->
+  <!-- Idle vs Expiry -->
   <div class="tab-content" *ngIf="selectedLabTab==='idle'">
     <h3>Idle vs Expiration</h3>
-    <p>Coming soon: show token expiration vs user idle session timers and how to implement idle logout UX.</p>
+    <div class="warning" *ngIf="disableExpiryLogout && expiryToastVisible">
+      {{ expiryToastMessage }}
+      <button (click)="rotateRefreshTokenNow()" style="margin-left:8px;">Refresh now</button>
+      <button (click)="dismissExpiryToast()" style="margin-left:4px;">Dismiss</button>
+    </div>
+    <div class="info-panel">
+      <p>
+        Access tokens expire based on <em>exp</em>, regardless of user activity. Idle timers are a <em>UX policy</em> — after
+        <strong>no user activity</strong> for a threshold, log out or re-auth. This demo tracks both clocks so you can see
+        how they interact.
+      </p>
+    </div>
+    <div class="grid">
+      <div>
+        <h4>Controls</h4>
+        <div class="spaced">
+          <label>Idle timeout (seconds): </label>
+          <input type="number" [(ngModel)]="idleTimeoutSec" min="10" style="width:120px;" />
+        </div>
+        <div>
+          <label><input type="checkbox" [(ngModel)]="idleAutoLogout" /> Auto-logout on idle</label>
+        </div>
+        <div style="margin-top:6px;">
+          <label><input type="checkbox" [(ngModel)]="disableExpiryLogout" (change)="applyExpiryLogoutSetting()" /> Don't auto-logout on token expiry (lab)</label>
+        </div>
+        <p class="spaced">
+          <button (click)="idleToggle()">{{ idleEnabled ? 'Disable Idle Monitor' : 'Enable Idle Monitor' }}</button>
+          <button (click)="recordActivitySimulate()" [disabled]="!idleEnabled" style="margin-left:8px;">Simulate activity</button>
+        </p>
+      </div>
+      <div>
+        <h4>Status</h4>
+        <ul>
+          <li>Idle monitor: <strong>{{ idleEnabled ? 'enabled' : 'disabled' }}</strong></li>
+          <li>Last activity: <strong>{{ lastActivityAt ? (lastActivityAt | date:'medium') : 'n/a' }}</strong></li>
+          <li>Idle remaining: <strong>{{ idleRemainingSec !== null ? idleRemainingSec + 's' : 'n/a' }}</strong>
+            <span *ngIf="idleEnabled && idleRemainingSec !== null && idleRemainingSec <= idleWarnSeconds" style="color:darkorange">(near idle)</span>
+          </li>
+          <li>Access token remaining: <strong>{{ accessTokenExpiresIn !== null ? accessTokenExpiresIn + 's' : 'n/a' }}</strong></li>
+        </ul>
+      </div>
+    </div>
+    <div class="warning" *ngIf="idleEnabled && idleRemainingSec === 0">
+      Idle threshold reached. <span *ngIf="idleAutoLogout">Logged out automatically.</span><span *ngIf="!idleAutoLogout">Auto-logout disabled.</span>
+    </div>
   </div>
 
   <!-- Multi-tab sync placeholder -->

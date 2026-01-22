@@ -188,6 +188,16 @@ export class PlainAuthProvider implements AuthProvider {
       if (!this.accessTokenExp) return;
       const now = Math.floor(Date.now() / 1000);
       if (now >= this.accessTokenExp) {
+        // Lab toggle: allow disabling auto-logout on access expiry
+        let disableLogout = false;
+        try { disableLogout = sessionStorage.getItem('lab:disable-expiry-logout') === '1'; } catch {}
+        if (disableLogout) {
+          // Keep current token value (may be expired); mark state error but do not force logout.
+          // Stop watcher; the interceptor can refresh on next API call.
+          this.emit({ loggedIn: !!this.accessToken, accessToken: this.accessToken, accessTokenExp: this.accessTokenExp, tokenPayload: this.tokenPayload, error: 'Access token expired — will refresh on next API call.' });
+          this.stopTokenExpiryWatcher();
+          return;
+        }
         this.accessToken = null;
         this.accessTokenExp = null;
         this.tokenPayload = null;
