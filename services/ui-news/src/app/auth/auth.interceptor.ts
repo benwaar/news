@@ -1,6 +1,6 @@
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { tokenKey } from './storage';
+import { tokenKey, STORAGE_STRATEGY_KEY } from './storage';
 import { AuthTokenService } from './token.service';
 import { RefreshService } from './refresh.service';
 import { catchError, switchMap, throwError, from } from 'rxjs';
@@ -25,10 +25,29 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       return next(req);
     }
     const tokenSvc = inject(AuthTokenService);
-    let token = tokenSvc.getToken();
-    if (!token) {
+    let token: string | null = null;
+    // Determine preferred storage strategy (default to 'session')
+    let strategy: 'memory' | 'session' | 'local' = 'session';
+    try {
+      const saved = sessionStorage.getItem(STORAGE_STRATEGY_KEY) as any;
+      if (saved === 'memory' || saved === 'session' || saved === 'local') strategy = saved;
+    } catch (_) {}
+    try {
       const key = tokenKey(REALM, CLIENT_ID);
-      token = sessionStorage.getItem(key);
+      if (strategy === 'memory') {
+        token = tokenSvc.getToken();
+      } else if (strategy === 'session') {
+        token = sessionStorage.getItem(key);
+      } else if (strategy === 'local') {
+        token = localStorage.getItem(key);
+      }
+      // Fallback: if memory strategy chosen but empty, try session to keep demo usable
+      if (!token && strategy === 'memory') {
+        token = sessionStorage.getItem(key);
+      }
+    } catch (_) {
+      // If storage access fails, fall back to in-memory
+      try { token = tokenSvc.getToken(); } catch { token = null; }
     }
     if (!token) {
       try { tokenSvc.markSkipped(url); } catch (_) {}
@@ -40,7 +59,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       }
     });
     try { tokenSvc.markAttached(url, token); } catch (_) {}
-    debugger; // Dev: pause here to verify interceptor path
+    // debugger; // Uncomment for dev to verify interceptor path
     const refresher = inject(RefreshService);
     return next(authReq).pipe(
       catchError((err) => {

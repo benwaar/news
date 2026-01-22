@@ -39,6 +39,23 @@
   - Identify CSP breakage points
   - Validate SPA compatibility
 
+## 4.1 XSS Exercises (Hands-on)
+- Scenarios:
+  - Reflected XSS (simulated route/param echo in dev)
+  - DOM-based XSS (dangerous innerHTML sink demo)
+  - Token theft via `localStorage`/`sessionStorage`
+- Steps:
+  1) In the UI, open JWT Lab → Storage Options, switch to `localStorage`, save an access token, and observe it in the preview.
+  2) Visit a demo page that reflects a query param (e.g., `/xss?msg=<img src=x onerror=alert('xss')>`). Confirm behavior with/without CSP.
+  3) Use a DOM sink demo where untrusted HTML is injected via `innerHTML`. Attempt payloads and note what CSP blocks.
+  4) With a token in `localStorage`, run a snippet in DevTools to read `localStorage['token:news:news-web']` and simulate exfiltration. Discuss why HttpOnly cookies mitigate this.
+- Mitigations:
+  - Prefer BFF + HttpOnly cookies for production.
+  - Keep tokens in memory when possible; avoid persistent web storage.
+  - Enable strict CSP (no `unsafe-inline`; use nonces/hashes; limit script origins).
+  - Consider Trusted Types to prevent DOM-based XSS in large SPAs.
+  - Sanitize any dynamic HTML (avoid `innerHTML`; use safe templating).
+
 ## 5. Enforcement & Regression
 - Switch CSP from report-only → enforced
 - Re-test:
@@ -97,3 +114,54 @@
 - Docker Compose with selectable profiles
 - README with architecture diagram
 - Defined success conditions (flags or proofs)
+
+
+-----
+
+# BFF + HttpOnly + CSRF Lab (Planned)
+
+Goal: Demonstrate how a Backend-for-Frontend issues HttpOnly cookies and defends state-changing requests with CSRF protections, keeping tokens out of JavaScript while preserving SPA UX.
+
+## Architecture
+- Browser → UI (Angular)
+- UI → BFF (Node/Express)
+- BFF → IdP (Keycloak) for OAuth/OIDC
+- BFF → API (news-api) with server-side `Authorization`
+
+## Cookie Model
+- `session` (HttpOnly, Secure, SameSite=Lax or Strict, Path=/)
+- Optional: non-HttpOnly `csrf` token cookie (per-request header echo)
+- Access/refresh tokens remain server-side (not readable by JS)
+
+## Exercises
+1) Set cookie flags
+  - Add `Set-Cookie: session=...; HttpOnly; Secure; SameSite=Lax; Path=/` in BFF responses.
+  - Verify in DevTools → Application → Cookies; confirm not readable via `document.cookie`.
+2) CSRF defense (double-submit or header token)
+  - BFF sets `csrf` cookie (non-HttpOnly) and expects `X-CSRF-Token` header to match.
+  - UI reads `csrf` cookie and sends header on `POST/PUT/DELETE`.
+  - Attempt a cross-site form POST from a simple attacker page; expect rejection (403) without correct header.
+3) SameSite behavior
+  - With `SameSite=Lax`, test top-level GET navigations vs POST form submissions; observe cookie send behavior.
+  - Switch to `SameSite=Strict` and note stricter behavior.
+4) CORS boundary
+  - Keep BFF on same origin as UI to avoid credentialed CORS; contrast with cross-origin setup and required CORS config.
+
+## Step-by-step (once BFF stub is added)
+1) Start stack with BFF profile (compose override): `docker compose -f docker-compose.yml -f docker-compose.bff.yml up`
+2) Login via UI; confirm no access token appears in web storage; cookies present.
+3) Call protected API route via UI; check BFF adds `Authorization` to upstream call; verify browser never sees token.
+4) Try CSRF attack page; observe block unless correct `X-CSRF-Token` present.
+
+## Success Criteria
+- Tokens never accessible to JavaScript
+- CSRF-protected routes reject forged requests
+- Normal SPA flows (GET + state-changing requests) succeed with CSRF header
+
+## Next Steps
+- Implement a minimal BFF in `services/bff/` with:
+  - OAuth code + PKCE flow handling
+  - Session issuance (HttpOnly cookie)
+  - `/csrf` endpoint to mint/rotate CSRF tokens
+  - Proxy routes to `news-api` attaching `Authorization`
+- Add a tiny attacker page under a different origin in `infra/` to validate CSRF assumptions

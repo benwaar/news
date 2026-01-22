@@ -424,7 +424,80 @@
   <!-- Storage options placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='storage'">
     <h3>Storage Options</h3>
-    <p>Coming soon: compare in-memory, sessionStorage, localStorage, and HttpOnly cookies (via BFF) with their tradeoffs and XSS/CSRF implications.</p>
+    <div class="info-panel">
+      <h4>Overview</h4>
+      <ul>
+        <li><strong>Memory</strong>: token lives only in this Angular runtime; disappears on reload.</li>
+        <li><strong>sessionStorage</strong>: per-tab storage; cleared when the tab closes; not shared across tabs.</li>
+        <li><strong>localStorage</strong>: persists across tabs and browser restarts on the same origin.</li>
+        <li><strong>HttpOnly Cookie (BFF)</strong>: cookie is not readable by JS; server (BFF) uses it to call APIs. <em>Out of scope in this project.</em></li>
+      </ul>
+      <h4>Security</h4>
+      <ol>
+        <li><strong>HttpOnly Cookie (BFF)</strong> — most secure: tokens never exposed to JavaScript; requires CSRF protections and cookie hardening.</li>
+        <li><strong>Memory</strong> — safer for SPAs: no persistence; vulnerable only while page is loaded (still exposed to XSS).</li>
+        <li><strong>sessionStorage</strong> — moderate: per-tab and cleared on close, but readable by JavaScript and survives reload in that tab.</li>
+        <li><strong>localStorage</strong> — least secure: persistent and shared across tabs; fully readable by JavaScript (highest XSS persistence risk).</li>
+      </ol>
+      <h5>How to view in DevTools</h5>
+      <ul>
+        <li><strong>localStorage</strong>: Open DevTools → Application → Local Storage → your origin; look for key <code>token:news:news-web</code>. Or run <code>localStorage.getItem('token:news:news-web')</code> in the Console.</li>
+        <li><strong>Memory</strong>: Not stored in Web Storage. After clicking <em>Save current access token to selected</em> with <em>Memory</em> chosen, see the “Memory” box below. You can also make a protected call and inspect the <code>Authorization</code> header in the Network tab, or check the Basics → Interceptor panel.</li>
+      </ul>
+      <h5>Attacker POV (runtime JS)</h5>
+      <ul>
+        <li>If a malicious script runs in-page (XSS/extension), it can capture in‑memory tokens by <em>hooking request headers</em> set by Angular HttpClient (XHR) or by reading the Network details.</li>
+      </ul>
+      <p *ngIf="isDev">
+        <button (click)="runHeaderHook()" [disabled]="headerHookEnabled">{{ headerHookEnabled ? 'XHR hook enabled' : 'Run demo XHR hook (dev)' }}</button>
+        <button (click)="runHookTestCall()" [disabled]="!headerHookEnabled || !loggedIn" style="margin-left:8px;">Run test call (Healthz)</button>
+      </p>
+      <pre>/* Example: log Authorization headers set on XHR (Angular HttpClient uses XHR) */
+const orig = XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader = function(k, v) &#123;
+  if ((k || '').toLowerCase() === 'authorization') console.log('[stolen]', v);
+  return orig.apply(this, arguments);
+&#125;;</pre>
+      <div class="warning">
+        Tokens in browser storage (session/local) are accessible to JavaScript and therefore vulnerable to XSS. Use a strict CSP and safe coding practices, or consider a BFF pattern with HttpOnly cookies.
+      </div>
+      <div class="info-panel">
+        <h4>What is BFF + HttpOnly?</h4>
+        <p>
+          <strong>BFF (Backend-for-Frontend)</strong> is a small server that handles OAuth/OIDC with the IdP and stores session state in an <strong>HttpOnly</strong> cookie. The browser never sees tokens; the BFF adds auth when calling downstream APIs. HttpOnly cookies are sent by the browser automatically, but are not readable by JavaScript, which mitigates token theft via XSS.
+          <br />
+          <strong>Note:</strong> This demo is a client-side SPA exercise and <em>does not implement BFF</em>. We include the concept for comparison only.
+        </p>
+      </div>
+    </div>
+
+    <h4>Select Storage Strategy</h4>
+    <div class="spaced">
+      <label><input type="radio" name="storageStrategy" (change)="storageSelect('memory')" [checked]="storageStrategy==='memory'" /> Memory</label>
+      <label style="margin-left:12px;"><input type="radio" name="storageStrategy" (change)="storageSelect('session')" [checked]="storageStrategy==='session'" /> sessionStorage</label>
+      <label style="margin-left:12px;"><input type="radio" name="storageStrategy" (change)="storageSelect('local')" [checked]="storageStrategy==='local'" /> localStorage</label>
+    </div>
+
+    <p>
+      <button (click)="storageSaveToSelected()" [disabled]="!accessToken">Save current access token to selected</button>
+      <button (click)="storageClearSelected()">Clear selected storage</button>
+      <button (click)="storageRefreshView()">Refresh view</button>
+    </p>
+
+    <div class="grid">
+      <div>
+        <h4>Memory</h4>
+        <pre>{{ storageMemToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>sessionStorage</h4>
+        <pre>{{ storageSessionToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>localStorage</h4>
+        <pre>{{ storageLocalToken || 'n/a' }}</pre>
+      </div>
+    </div>
   </div>
 
   <!-- Idle vs Expiry placeholder -->

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
 import { AuthTokenService } from './auth/token.service';
-import { tokenKey, refreshKey } from './auth/storage';
+import { tokenKey, refreshKey, STORAGE_STRATEGY_KEY } from './auth/storage';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
 import { RefreshService } from './auth/refresh.service';
 import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles, fetchRealmJwks, verifyJwtRS256WithJwk } from './utils';
@@ -63,7 +63,7 @@ export class AppComponent {
     { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: true },
     { id: 'interceptor', label: 'Interceptor: Attach', ready: true },
     { id: 'refresh', label: '401→Refresh→Retry', ready: true },
-    { id: 'storage', label: 'Storage Options', ready: false },
+    { id: 'storage', label: 'Storage Options', ready: true },
     { id: 'idle', label: 'Idle vs Expiry', ready: false },
     { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
     { id: 'silent', label: 'Silent Re-auth', ready: false },
@@ -110,9 +110,16 @@ export class AppComponent {
   intLastUrl: string | null = null;
   intLastHeader: string | null = null;
   intHealthz: any = null;
+  intLastToken: string | null = null;
+  intShowAttachedToken: boolean = false;
   // Refresh tab token view
   refreshAccessToken: string | null = null;
   refreshRefreshToken: string | null = null;
+  // Storage tab state
+  storageStrategy: 'memory' | 'session' | 'local' = 'session';
+  storageMemToken: string | null = null;
+  storageSessionToken: string | null = null;
+  storageLocalToken: string | null = null;
 
   constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService){
     // Determine environment by port (dev: 4200, prod: 80)
@@ -124,6 +131,13 @@ export class AppComponent {
     // Load selected auth mode (default 'plain')
     const savedMode = sessionStorage.getItem(AUTH_MODE_STORAGE_KEY) as AuthMode | null;
     if (savedMode && this.authModes.includes(savedMode)) this.authMode = savedMode;
+    // Load saved storage strategy preference
+    try {
+      const savedStrategy = sessionStorage.getItem(STORAGE_STRATEGY_KEY) as 'memory' | 'session' | 'local' | null;
+      if (savedStrategy === 'memory' || savedStrategy === 'session' || savedStrategy === 'local') {
+        this.storageStrategy = savedStrategy;
+      }
+    } catch (_) {}
     // Initialize provider based on mode
     this.provider = createAuthProvider(this.authMode);
     const cfg: AuthConfig = { realm: this.realm, kcBase: this.kcBase, clientId: this.clientId, redirectUri: this.redirectUri };
@@ -487,12 +501,99 @@ export class AppComponent {
     this.intAttached = this.authTokenSvc.getLastAttached();
     this.intLastUrl = this.authTokenSvc.getLastUrl();
     this.intLastHeader = this.authTokenSvc.getLastAuthHeader();
+    this.intLastToken = this.authTokenSvc.getLastToken();
     // Update Refresh tab token view
     try {
       const tKey = tokenKey(this.realm, this.clientId);
       const rKey = refreshKey(this.realm, this.clientId);
       this.refreshAccessToken = sessionStorage.getItem(tKey);
       this.refreshRefreshToken = sessionStorage.getItem(rKey);
+    } catch (_) {}
+  }
+
+  // Dev helper: hook XHR header setting to demonstrate attacker capture of Authorization
+  headerHookEnabled = false;
+  runHeaderHook() {
+    if (this.headerHookEnabled) return;
+    try {
+      const xhrProto: any = (XMLHttpRequest as any).prototype;
+      if (!xhrProto || !xhrProto.setRequestHeader) return;
+      const original = xhrProto.setRequestHeader;
+      const self = this;
+      xhrProto.setRequestHeader = function(k: any, v: any) {
+        try {
+          if ((k || '').toString().toLowerCase() === 'authorization') {
+            // eslint-disable-next-line no-console
+            console.log('[demo-xhr-hook] captured header:', v);
+            self.intLastHeader = `Authorization: ${v}`;
+          }
+        } catch {}
+        return original.apply(this, arguments as any);
+      };
+      this.headerHookEnabled = true;
+      // Prepare environment for the demo: use memory, clear others, set in-memory token
+      try {
+        const key = tokenKey(this.realm, this.clientId);
+        try { sessionStorage.removeItem(key); } catch {}
+        try { localStorage.removeItem(key); } catch {}
+        this.storageStrategy = 'memory';
+        try { sessionStorage.setItem(STORAGE_STRATEGY_KEY, 'memory'); } catch {}
+        if (this.accessToken) {
+          this.authTokenSvc.setToken(this.accessToken);
+        }
+        this.storageRefreshView();
+      } catch {}
+    } catch {}
+  }
+
+  // Convenience: trigger a safe call to show the hook capturing Authorization
+  runHookTestCall() {
+    this.intHealthzHttp();
+  }
+
+  // ---------- Storage tab helpers ----------
+  storageSelect(strategy: 'memory' | 'session' | 'local') {
+    this.storageStrategy = strategy;
+    try { sessionStorage.setItem(STORAGE_STRATEGY_KEY, strategy); } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageSaveToSelected() {
+    const token = this.accessToken;
+    if (!token) return;
+    const key = tokenKey(this.realm, this.clientId);
+    try {
+      if (this.storageStrategy === 'memory') {
+        this.authTokenSvc.setToken(token);
+      } else if (this.storageStrategy === 'session') {
+        sessionStorage.setItem(key, token);
+      } else if (this.storageStrategy === 'local') {
+        localStorage.setItem(key, token);
+      }
+    } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageClearSelected() {
+    const key = tokenKey(this.realm, this.clientId);
+    try {
+      if (this.storageStrategy === 'memory') {
+        this.authTokenSvc.setToken(null);
+      } else if (this.storageStrategy === 'session') {
+        sessionStorage.removeItem(key);
+      } else if (this.storageStrategy === 'local') {
+        localStorage.removeItem(key);
+      }
+    } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageRefreshView() {
+    try {
+      const key = tokenKey(this.realm, this.clientId);
+      this.storageMemToken = this.authTokenSvc.getToken();
+      this.storageSessionToken = sessionStorage.getItem(key);
+      this.storageLocalToken = localStorage.getItem(key);
     } catch (_) {}
   }
 }

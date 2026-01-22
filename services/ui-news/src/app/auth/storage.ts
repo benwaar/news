@@ -9,3 +9,6 @@ export function tokenKey(realm: string, clientId: string): string {
 export function refreshKey(realm: string, clientId: string): string {
   return `refresh:${realm}:${clientId}`;
 }
+
+// Persisted UI preference for where to read/write access tokens for demos
+export const STORAGE_STRATEGY_KEY = 'storage:strategy';
