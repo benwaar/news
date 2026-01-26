@@ -156,9 +156,8 @@ export class AppComponent {
     this.envLabel = this.isDev ? `DEV (${this.currentPort})` : `PROD (${this.currentPort})`;
     this.apiLabel = this.isDev ? 'API: localhost:9000' : 'API: via /api';
     fetch('/api/healthz').then(r => r.json()).then(j => this.health = j).catch(e => this.health = { error: String(e) });
-    // Load selected auth mode (default 'plain')
-    const savedMode = sessionStorage.getItem(AUTH_MODE_STORAGE_KEY) as AuthMode | null;
-    if (savedMode && this.authModes.includes(savedMode)) this.authMode = savedMode;
+    // Force plain provider; selector removed and lab is plain-only
+    this.authMode = 'plain';
     // Load saved storage strategy preference
     try {
       const savedStrategy = sessionStorage.getItem(STORAGE_STRATEGY_KEY) as 'memory' | 'session' | 'local' | null;

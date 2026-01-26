@@ -3,14 +3,7 @@
 <div class="env-indicator" [class.dev]="isDev" [class.prod]="!isDev">{{ envLabel }}</div>
 <div class="api-indicator">{{ apiLabel }}</div>
 <div class="dev-cascade" *ngIf="isDev"></div>
-<div class="spaced">
-  <label for="authMode">Auth Mode:&nbsp;</label>
-  <select id="authMode" (change)="onModeChange($event)">
-    <option *ngFor="let m of authModes" [selected]="m===authMode" [value]="m">{{ m }}</option>
-  </select>
-  <span *ngIf="authMode!=='plain'" style="margin-left:8px">(scaffolded; plain mode active)</span>
-  <span *ngIf="authMode==='plain'" style="margin-left:8px">(plain manual PKCE)</span>
-  </div>
+<!-- Auth Mode selector removed: Lab is plain-only and complete -->
 <div class="badge">Realm: <strong>news</strong>
   <button (click)="login()" *ngIf="!loggedIn" [disabled]="authMode!=='plain'">Login</button>
   <button (click)="logout()" *ngIf="loggedIn" [disabled]="authMode!=='plain'">Logout</button>
