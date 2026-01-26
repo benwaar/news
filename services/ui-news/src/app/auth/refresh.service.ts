@@ -14,11 +14,32 @@ export class RefreshService {
   constructor(private tokenSvc: AuthTokenService) {}
 
   async refresh(): Promise<string | null> {
+    // Cross-tab refresh lock to avoid multiple tabs refreshing at once
+    const REALM = 'news';
+    const CLIENT_ID = 'news-web';
+    const tKey = tokenKey(REALM, CLIENT_ID);
+    const lockKey = 'auth:refresh:lock';
+    const now = Date.now();
+    try {
+      const lockTs = Number(localStorage.getItem(lockKey) || '0');
+      if (lockTs && now - lockTs < 10000) {
+        // Another tab is refreshing. Wait briefly for sessionStorage to update.
+        const waited = await this.waitForExternalRefresh(tKey, 5000);
+        if (waited) {
+          this.tokenSvc.setToken(waited);
+          return waited;
+        }
+      }
+      // Acquire lock for this tab
+      localStorage.setItem(lockKey, String(now));
+    } catch (_) {}
+
     if (this.inFlight) {
       return this.inFlight;
     }
     const p = this.performRefresh().finally(() => {
       this.inFlight = null;
+      try { localStorage.removeItem(lockKey); } catch {}
     });
     this.inFlight = p;
     return p;
@@ -50,9 +71,28 @@ export class RefreshService {
         if (newRefresh) sessionStorage.setItem(rKey, newRefresh);
       } catch (_) {}
       this.tokenSvc.setToken(access);
+      // Broadcast refresh to other tabs (localStorage event)
+      try {
+        localStorage.setItem('auth:bc', JSON.stringify({ from: 'refresh-service', type: 'refresh', payload: { access }, at: Date.now() }));
+      } catch {}
       return access;
     } catch (_) {
       return null;
     }
+  }
+
+  private async waitForExternalRefresh(tKey: string, timeoutMs: number): Promise<string | null> {
+    const start = Date.now();
+    const initial = sessionStorage.getItem(tKey);
+    while (Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 250));
+      try {
+        const current = sessionStorage.getItem(tKey);
+        if (current && current !== initial) {
+          return current;
+        }
+      } catch {}
+    }
+    return null;
   }
 }

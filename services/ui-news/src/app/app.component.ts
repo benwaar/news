@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -65,7 +65,7 @@ export class AppComponent {
     { id: 'refresh', label: '401→Refresh→Retry', ready: true },
     { id: 'storage', label: 'Storage Options', ready: true },
     { id: 'idle', label: 'Idle vs Expiry', ready: true },
-    { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
+    { id: 'multitab', label: 'Multi-Tab Sync', ready: true },
     { id: 'silent', label: 'Silent Re-auth', ready: false },
   ];
   selectedLabTab = 'hs256-basic';
@@ -135,7 +135,16 @@ export class AppComponent {
   expiryToastVisible = false;
   expiryToastMessage = 'Access token expired — will refresh on next API call.';
 
-  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService){
+  // Multi-tab sync (BroadcastChannel + storage fallback)
+  multitabEnabled = false;
+  tabId: string = Math.random().toString(36).slice(2) + '-' + Date.now();
+  private bc: BroadcastChannel | null = null;
+  private bcPollTimer: any = null;
+  private bcLastRaw: string | null = null;
+  multiLastEvent: any = null;
+  multiLog: Array<{ at: Date; from: string; type: string; payload?: any }> = [];
+
+  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService, private zone: NgZone){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     this.isDev = this.currentPort === '4200';
@@ -186,6 +195,14 @@ export class AppComponent {
       else if (v === '1') this.disableExpiryLogout = true;
       else sessionStorage.setItem('lab:disable-expiry-logout', this.disableExpiryLogout ? '1' : '0');
     } catch {}
+    // Fallback storage listener for multi-tab (Safari or disabled BroadcastChannel)
+    window.addEventListener('storage', (e) => {
+      try {
+        if (e.key !== 'auth:bc' || !e.newValue) return;
+        const msg = JSON.parse(e.newValue || '{}');
+        this.zone.run(() => this.multiHandle(msg));
+      } catch {}
+    });
   }
 
   onModeChange(evt: Event) {
@@ -227,7 +244,10 @@ export class AppComponent {
 
   async login() { this.provider.login(); }
 
-  logout() { this.provider.logout(); }
+  logout() {
+    try { if (this.multitabEnabled) this.multiBroadcast('logout'); } catch {}
+    this.provider.logout();
+  }
 
   async validateToken() {
     this.error = '';
@@ -740,4 +760,92 @@ export class AppComponent {
   }
 
   dismissExpiryToast() { this.expiryToastVisible = false; }
+
+  // ---------- Multi-tab sync helpers ----------
+  multitabToggle(value?: boolean) {
+    // Explicitly accept new value from ngModelChange and apply
+    if (typeof value === 'boolean') this.multitabEnabled = value;
+    if (this.multitabEnabled) this.multiInit(); else this.multiClose();
+  }
+
+  private multiInit() {
+    try {
+      if ('BroadcastChannel' in window) {
+        this.bc = new (window as any).BroadcastChannel('news-auth');
+        const bcAny: any = this.bc as any;
+        bcAny.onmessage = (ev: MessageEvent) => {
+          try { this.zone.run(() => this.multiHandle(ev.data)); } catch {}
+        };
+      } else {
+        this.bc = null;
+      }
+      // Poll fallback: detect localStorage changes even if 'storage' events don't fire
+      if (!this.bcPollTimer) {
+        this.bcLastRaw = null;
+        this.bcPollTimer = setInterval(() => {
+          try {
+            const raw = localStorage.getItem('auth:bc');
+            if (raw && raw !== this.bcLastRaw) {
+              this.bcLastRaw = raw;
+              const msg = JSON.parse(raw);
+              this.zone.run(() => this.multiHandle(msg));
+            }
+          } catch {}
+        }, 1000);
+      }
+      // Announce presence
+      this.multiBroadcast('ping');
+    } catch {}
+  }
+
+  private multiClose() {
+    try { if (this.bc) { this.bc.close(); this.bc = null; } } catch {}
+    try { if (this.bcPollTimer) { clearInterval(this.bcPollTimer); this.bcPollTimer = null; } } catch {}
+  }
+
+  multiBroadcast(type: 'logout' | 'refresh' | 'ping', payload?: any) {
+    const msg = { from: this.tabId, type, payload, at: Date.now() };
+    try { if (this.bc) this.bc.postMessage(msg); } catch {}
+    try { localStorage.setItem('auth:bc', JSON.stringify(msg)); } catch {}
+    this.multiRecord(msg);
+  }
+
+  private multiHandle(msg: any) {
+    if (!msg || !this.multitabEnabled) return;
+    const { from, type, payload } = msg;
+    // Ignore self
+    if (from === this.tabId) return;
+    this.multiLastEvent = { type, from, payload, at: new Date() };
+    this.multiRecord(msg);
+    if (type === 'logout') {
+      try { this.provider.logout(); } catch {}
+    }
+    if (type === 'refresh' && payload && payload.access) {
+      const access: string = payload.access;
+      try {
+        const tKey = tokenKey(this.realm, this.clientId);
+        sessionStorage.setItem(tKey, access);
+      } catch {}
+      // Update interceptor source and local state
+      try { this.authTokenSvc.setToken(access); } catch {}
+      try {
+        const parts = decodeJwtParts(access);
+        this.accessToken = access;
+        this.accessTokenExp = (typeof parts.payload?.exp === 'number') ? parts.payload.exp : null;
+        this.tokenPayload = parts.payload || null;
+        this.loggedIn = !!access;
+        this.error = '';
+        this.updateBasicsDerived();
+        this.refreshInterceptorDebug();
+      } catch {}
+    }
+    // Future: handle 'refresh' coordination here
+  }
+
+  private multiRecord(msg: any) {
+    try {
+      this.multiLog.unshift({ at: new Date(), from: msg?.from, type: msg?.type, payload: msg?.payload });
+      if (this.multiLog.length > 10) this.multiLog.pop();
+    } catch {}
+  }
 }

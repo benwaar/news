@@ -553,7 +553,41 @@ XMLHttpRequest.prototype.setRequestHeader = function(k, v) &#123;
   <!-- Multi-tab sync placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='multitab'">
     <h3>Multi-Tab Sync</h3>
-    <p>Coming soon: coordinate auth state with BroadcastChannel, avoid refresh races, and propagate logout.</p>
+    <div class="info-panel">
+      <p>
+        Coordinate auth state across browser <strong>tabs/windows</strong> using <strong>BroadcastChannel</strong> with a localStorage fallback.
+        This demo broadcasts <em>logout</em> and shows received events.
+      </p>
+      <h4>How to try it</h4>
+      <ol>
+        <li>Open two tabs or windows to <a href="https://localhost:4200" target="_blank" rel="noopener">https://localhost:4200</a>.</li>
+        <li>In both, go to JWT Lab → Multi-Tab Sync, then check “Enable Multi-Tab Sync”.</li>
+        <li>Click “Ping other tabs” and watch the events list update in both tabs.</li>
+        <li>Click “Broadcast logout” — the other tab should immediately log out as well.</li>
+        <li>Logging out via the usual button will broadcast if multi-tab is enabled.</li>
+      </ol>
+    </div>
+    <div class="grid">
+      <div>
+        <h4>Controls</h4>
+        <p>
+          <label><input type="checkbox" [(ngModel)]="multitabEnabled" (ngModelChange)="multitabToggle($event)" /> Enable Multi-Tab Sync</label>
+          <br />
+          <em>Enable in both tabs/windows for messages to be received.</em>
+        </p>
+        <p>
+          <button (click)="multiBroadcast('ping')" [disabled]="!multitabEnabled">Ping other tabs</button>
+          <button (click)="multiBroadcast('logout')" [disabled]="!multitabEnabled" style="margin-left:8px;">Broadcast logout</button>
+        </p>
+      </div>
+      <div>
+        <h4>Events</h4>
+        <ul>
+          <li *ngFor="let ev of multiLog">{{ ev.at | date:'mediumTime' }} — {{ ev.type }} from {{ ev.from }}</li>
+        </ul>
+        <p *ngIf="!multiLog.length">No events yet.</p>
+      </div>
+    </div>
   </div>
 
   <!-- Silent re-auth placeholder -->
