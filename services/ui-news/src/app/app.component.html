@@ -608,8 +608,20 @@ XMLHttpRequest.prototype.setRequestHeader = function(k, v) &#123;
       </ul>
     </div>
     <p>
-      Coming soon: a minimal iframe flow and safe failure handling.
+      <button (click)="startSilentReauth()" [disabled]="silentInFlight || authMode!=='plain'">Start Silent Re-auth</button>
+      <span *ngIf="silentInFlight" style="margin-left:8px;">Attempting…</span>
+      <span *ngIf="silentError" class="error" style="margin-left:8px;">{{ silentError }}</span>
     </p>
+    <div class="grid">
+      <div>
+        <h4>Frame URL</h4>
+        <pre>{{ silentFrameUrl || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Result</h4>
+        <pre>{{ silentLastResult | json }}</pre>
+      </div>
+    </div>
   </div>
   </div>
 </div>

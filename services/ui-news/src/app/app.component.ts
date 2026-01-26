@@ -66,7 +66,7 @@ export class AppComponent {
     { id: 'storage', label: 'Storage Options', ready: true },
     { id: 'idle', label: 'Idle vs Expiry', ready: true },
     { id: 'multitab', label: 'Multi-Tab Sync', ready: true },
-    { id: 'silent', label: 'Silent Re-auth', ready: false },
+    { id: 'silent', label: 'Silent Re-auth', ready: true },
   ];
   selectedLabTab = 'hs256-basic';
 
@@ -98,6 +98,11 @@ export class AppComponent {
 
   // OIDC Code + PKCE (lab) debug state
   pkceDebug: any = null;
+  // Silent re-auth (prompt=none)
+  silentInFlight = false;
+  silentError: string = '';
+  silentFrameUrl: string | null = null;
+  silentLastResult: any = null;
 
   // Interceptor lab state
   intTokenAttached = false; // quick probe after a call
@@ -201,6 +206,16 @@ export class AppComponent {
         if (e.key !== 'auth:bc' || !e.newValue) return;
         const msg = JSON.parse(e.newValue || '{}');
         this.zone.run(() => this.multiHandle(msg));
+      } catch {}
+    });
+    // Listen for silent refresh results from iframe
+    window.addEventListener('message', (ev: MessageEvent) => {
+      try {
+        const data: any = ev.data || {};
+        if (ev.origin !== window.location.origin) return;
+        if (data && data.type === 'silent-refresh') {
+          this.zone.run(() => this.applySilentResult(data));
+        }
       } catch {}
     });
   }
@@ -356,6 +371,69 @@ export class AppComponent {
       }
     } catch (e) {
       this.error = 'PKCE debug failed: ' + String(e);
+    }
+  }
+
+  // ----- Silent Re-auth (prompt=none) -----
+  startSilentReauth() {
+    this.silentError = '';
+    if (this.silentInFlight) return;
+    try {
+      const anyProvider: any = this.provider as any;
+      if (typeof anyProvider.getSilentAuthUrl !== 'function') {
+        this.silentError = 'Silent auth not available for this mode.';
+        return;
+      }
+      const url: string = anyProvider.getSilentAuthUrl();
+      this.silentFrameUrl = url;
+      this.silentInFlight = true;
+      // Create hidden iframe and navigate to prompt=none URL
+      const iframe = document.createElement('iframe');
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.src = url;
+      iframe.onload = () => {
+        // Load fires on initial auth URL navigation; result posts back after redirect
+      };
+      document.body.appendChild(iframe);
+      // Cleanup after 15s in case of failure
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+        if (this.silentInFlight) {
+          this.silentInFlight = false;
+          this.silentError = 'Silent re-auth timeout or blocked.';
+        }
+      }, 15000);
+    } catch (e) {
+      this.silentError = String(e);
+      this.silentInFlight = false;
+    }
+  }
+
+  private applySilentResult(data: any) {
+    try {
+      this.silentInFlight = false;
+      this.silentLastResult = data;
+      const access: string | null = data?.access || null;
+      if (access) {
+        // Update interceptor source and local state
+        this.authTokenSvc.setToken(access);
+        const parts = decodeJwtParts(access);
+        this.accessToken = access;
+        this.accessTokenExp = (typeof parts.payload?.exp === 'number') ? parts.payload.exp : null;
+        this.tokenPayload = parts.payload || null;
+        this.loggedIn = !!access;
+        this.error = '';
+        this.updateBasicsDerived();
+        this.refreshInterceptorDebug();
+      } else {
+        this.silentError = 'Silent re-auth failed: no access token.';
+      }
+    } catch (e) {
+      this.silentError = 'Silent re-auth error: ' + String(e);
     }
   }
 

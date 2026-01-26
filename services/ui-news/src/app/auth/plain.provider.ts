@@ -14,6 +14,7 @@ export class PlainAuthProvider implements AuthProvider {
   private pkceVerifier: string | null = null;
   private pkceChallenge: string | null = null;
   private lastAuthUrl: string | null = null;
+  private lastAuthState: string | null = null;
   private lastTokenRequest: Record<string, string> | null = null;
   private lastTokenResponse: any = null;
 
@@ -36,8 +37,9 @@ export class PlainAuthProvider implements AuthProvider {
     try {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
+      const state = params.get('state') || null;
       if (code) {
-        await this.exchangeCodeForToken(code);
+        await this.exchangeCodeForToken(code, state || undefined);
         // Clean URL after handling login
         history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       } else {
@@ -75,8 +77,38 @@ export class PlainAuthProvider implements AuthProvider {
         `&response_type=code&scope=${encodeURIComponent('openid profile email')}` +
         `&code_challenge_method=S256&code_challenge=${encodeURIComponent(codeChallenge)}`;
       this.lastAuthUrl = url;
+      this.lastAuthState = null;
       window.location.href = url;
     });
+  }
+
+  // Build a prompt=none auth URL suitable for an off-screen iframe
+  getSilentAuthUrl(): string {
+    // Ensure PKCE verifier/challenge exist
+    const verifier = this.pkceVerifier || generateCodeVerifier();
+    this.pkceVerifier = verifier;
+    try { sessionStorage.setItem(pkceKey(this.cfg.realm, this.cfg.clientId), verifier); } catch (_) {}
+    // Compute challenge if missing (best-effort)
+    if (!this.pkceChallenge) {
+      try { computeCodeChallenge(verifier).then(ch => { this.pkceChallenge = ch; }).catch(() => {}); } catch {}
+    }
+    const ch = this.pkceChallenge;
+    const base = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/auth`;
+    const params: string[] = [
+      `client_id=${encodeURIComponent(this.cfg.clientId)}`,
+      `redirect_uri=${encodeURIComponent(this.cfg.redirectUri)}`,
+      `response_type=code`,
+      `scope=${encodeURIComponent('openid profile email')}`,
+      `prompt=none`,
+      `state=silent`
+    ];
+    if (ch) {
+      params.push(`code_challenge_method=S256`, `code_challenge=${encodeURIComponent(ch)}`);
+    }
+    const url = `${base}?${params.join('&')}`;
+    this.lastAuthUrl = url;
+    this.lastAuthState = 'silent';
+    return url;
   }
 
   logout(): void {
@@ -142,7 +174,7 @@ export class PlainAuthProvider implements AuthProvider {
   }
 
 
-  private async exchangeCodeForToken(code: string) {
+  private async exchangeCodeForToken(code: string, state?: string) {
     const verifier = sessionStorage.getItem(pkceKey(this.cfg.realm, this.cfg.clientId));
     if (!verifier) throw new Error('Missing PKCE verifier');
     const body = new URLSearchParams();
@@ -180,6 +212,17 @@ export class PlainAuthProvider implements AuthProvider {
     } catch (_) {}
     this.startTokenExpiryWatcher();
     this.emit();
+    // If running inside an iframe or in a silent state, notify parent window
+    try {
+      const inFrame = window.self !== window.top;
+      const isSilent = (state === 'silent') || (this.lastAuthState === 'silent');
+      if (inFrame || isSilent) {
+        const payload: any = { type: 'silent-refresh', access: this.accessToken, refresh };
+        window.parent && window.parent.postMessage(payload, window.location.origin);
+        // Also write localStorage for fallback inspectors
+        try { localStorage.setItem('auth:bc', JSON.stringify({ from: 'silent', type: 'refresh', payload: { access: this.accessToken }, at: Date.now() })); } catch {}
+      }
+    } catch (_) {}
   }
 
   private startTokenExpiryWatcher() {
@@ -223,6 +266,7 @@ export class PlainAuthProvider implements AuthProvider {
       challenge: this.pkceChallenge,
       challenge_method: this.pkceChallenge ? 'S256' : null,
       auth_url: this.lastAuthUrl,
+      auth_state: this.lastAuthState,
       token_request: this.lastTokenRequest,
       token_response: this.lastTokenResponse,
     };
