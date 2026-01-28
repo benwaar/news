@@ -3,10 +3,11 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "start",
-      "path": "services/ui-news",
-      "label": "ui-news: npm start",
+      "label": "ui-news: start with nvm",
+      "type": "shell",
+      "command": "source tools/node-use.sh 22 && cd services/ui-news && npm run start",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
       "problemMatcher": {
         "owner": "custom",
         "fileLocation": "absolute",
@@ -21,8 +22,7 @@
           "beginsPattern": ".*",
           "endsPattern": "Compiled successfully."
         }
-      },
-      "isBackground": true
+      }
     }
   ]
 }

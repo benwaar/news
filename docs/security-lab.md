@@ -39,6 +39,23 @@
   - Identify CSP breakage points
   - Validate SPA compatibility
 
+## 4.1 XSS Exercises (Hands-on)
+- Scenarios:
+  - Reflected XSS (simulated route/param echo in dev)
+  - DOM-based XSS (dangerous innerHTML sink demo)
+  - Token theft via `localStorage`/`sessionStorage`
+- Steps:
+  1) In the UI, open JWT Lab → Storage Options, switch to `localStorage`, save an access token, and observe it in the preview.
+  2) Visit a demo page that reflects a query param (e.g., `/xss?msg=<img src=x onerror=alert('xss')>`). Confirm behavior with/without CSP.
+  3) Use a DOM sink demo where untrusted HTML is injected via `innerHTML`. Attempt payloads and note what CSP blocks.
+  4) With a token in `localStorage`, run a snippet in DevTools to read `localStorage['token:news:news-web']` and simulate exfiltration. Discuss why HttpOnly cookies mitigate this.
+- Mitigations:
+  - Prefer BFF + HttpOnly cookies for production.
+  - Keep tokens in memory when possible; avoid persistent web storage.
+  - Enable strict CSP (no `unsafe-inline`; use nonces/hashes; limit script origins).
+  - Consider Trusted Types to prevent DOM-based XSS in large SPAs.
+  - Sanitize any dynamic HTML (avoid `innerHTML`; use safe templating).
+
 ## 5. Enforcement & Regression
 - Switch CSP from report-only → enforced
 - Re-test:
@@ -97,3 +114,6 @@
 - Docker Compose with selectable profiles
 - README with architecture diagram
 - Defined success conditions (flags or proofs)
+
+
+-----

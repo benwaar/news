@@ -3,14 +3,7 @@
 <div class="env-indicator" [class.dev]="isDev" [class.prod]="!isDev">{{ envLabel }}</div>
 <div class="api-indicator">{{ apiLabel }}</div>
 <div class="dev-cascade" *ngIf="isDev"></div>
-<div class="spaced">
-  <label for="authMode">Auth Mode:&nbsp;</label>
-  <select id="authMode" (change)="onModeChange($event)">
-    <option *ngFor="let m of authModes" [selected]="m===authMode" [value]="m">{{ m }}</option>
-  </select>
-  <span *ngIf="authMode!=='plain'" style="margin-left:8px">(scaffolded; plain mode active)</span>
-  <span *ngIf="authMode==='plain'" style="margin-left:8px">(plain manual PKCE)</span>
-  </div>
+<!-- Auth Mode selector removed: Lab is plain-only and complete -->
 <div class="badge">Realm: <strong>news</strong>
   <button (click)="login()" *ngIf="!loggedIn" [disabled]="authMode!=='plain'">Login</button>
   <button (click)="logout()" *ngIf="loggedIn" [disabled]="authMode!=='plain'">Logout</button>
@@ -59,6 +52,25 @@
             <li>[aud] Audience: <strong>{{ basicsClaims.aud ? basicsClaims.aud.join(', ') : 'n/a' }}</strong></li>
             <li>[sub] Subject present: <strong [style.color]="basicsClaims.subOk ? 'green' : 'crimson'">{{ basicsClaims.subOk ? 'yes' : 'no' }}</strong></li>
             <li>[exp] Expires valid (not expired): <strong [style.color]="basicsClaims.expOk ? 'green' : 'crimson'">{{ basicsClaims.expOk ? 'yes' : 'no' }}</strong></li>
+          <div class="info-panel">
+            <p>
+              Interceptor attached Authorization? <strong>{{ intAttached ? 'Yes' : 'No' }}</strong>
+              <span *ngIf="intLastUrl">(last URL: <code>{{ intLastUrl }}</code>)</span>
+            </p>
+            <p *ngIf="intLastToken">
+              <button (click)="intShowAttachedToken = !intShowAttachedToken">
+                {{ intShowAttachedToken ? 'Hide' : 'Show' }} attached token
+              </button>
+            </p>
+            <div *ngIf="intShowAttachedToken && intLastToken">
+              <h4>Attached Token</h4>
+              <pre>{{ intLastToken }}</pre>
+            </div>
+            <div *ngIf="intLastHeader">
+              <h4>Authorization Header</h4>
+              <pre>{{ intLastHeader }}</pre>
+            </div>
+          </div>
             <li>Roles/Groups: <strong>{{ basicsClaims.roles ? basicsClaims.roles.join(', ') : 'n/a' }}</strong></li>
           </ul>
         </div>
@@ -225,37 +237,384 @@
   <!-- OIDC Code+PKCE placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='oidc-pkce'">
     <h3>OIDC Code + PKCE</h3>
-    <p>Coming soon: step through the browser code flow, show <code>code_verifier</code>/<code>code_challenge</code>, and capture tokens after the token endpoint exchange.</p>
+    <div class="warning">Dev-only introspection of the Code+PKCE flow. Real apps should not expose these values in production.</div>
+    <div class="info-panel">
+      <h4>What you'll see</h4>
+      <ul>
+        <li><strong>code_verifier</strong>: generated in the browser and stored in sessionStorage.</li>
+        <li><strong>code_challenge (S256)</strong>: derived from the verifier; sent to the auth endpoint.</li>
+        <li><strong>Auth URL</strong>: the computed authorization request (includes challenge).</li>
+        <li><strong>Token request</strong>: POST params to the token endpoint including verifier.</li>
+        <li><strong>Token response</strong>: JSON returned (e.g., <em>access_token</em>, <em>id_token</em> if present).</li>
+      </ul>
+      <p>
+        This tab exposes the <em>normally invisible</em> parts of the browser OIDC flow so you can build intuition:
+        how the client creates a <strong>code_verifier</strong>, commits to it via a <strong>code_challenge</strong>,
+        and later proves possession of the verifier to the token endpoint. Seeing the exact auth URL and token request
+        helps debug misconfigurations (redirect URIs, scopes, client IDs) and verify that PKCE is truly in effect.
+      </p>
+      <h4>What is PKCE?</h4>
+      <p>
+        <strong>Proof Key for Code Exchange (PKCE)</strong> binds the authorization code to your browser session.
+        The SPA generates a random <em>code_verifier</em> and sends a derived <em>code_challenge</em> (S256) with the
+        initial auth request. Later, the token endpoint requires the original verifier to exchange the code. If an
+        attacker intercepts the authorization code, they still can’t redeem it without your verifier.
+        PKCE is required for public clients (SPAs) and removes the need for a client secret in the browser.
+      </p>
+      <h4>Why we do it</h4>
+      <ul>
+        <li><strong>Verify PKCE binding</strong>: confirm the server requires the same <em>code_verifier</em> that produced the challenge (prevents intercepted authorization code replay).</li>
+        <li><strong>Debug the flow</strong>: quickly spot wrong realm/client IDs, missing scopes, or redirect URI mismatches.</li>
+        <li><strong>Understand token types</strong>: differentiate <em>access_token</em> (for APIs) from <em>id_token</em> (for client UI).</li>
+        <li><strong>Observe timings</strong>: relate login redirects, token issuance, and token expiration to real UX.</li>
+        <li><strong>Production hygiene</strong>: learn what to <em>never</em> log or expose in prod (verifiers, full tokens).</li>
+      </ul>
+      <h4>Where it fits in the browser flow</h4>
+      <ol>
+        <li><strong>SPA starts</strong>: generate a <em>code_verifier</em>; derive <em>code_challenge</em> (S256).</li>
+        <li><strong>Auth request</strong>: redirect to the realm’s auth endpoint with client ID, redirect URI, scopes, and the challenge.</li>
+        <li><strong>Login at IdP</strong>: user authenticates (and consents if required).</li>
+        <li><strong>Redirect back</strong>: IdP returns an <em>authorization code</em> to the SPA’s redirect URI.</li>
+        <li><strong>Token exchange</strong>: SPA POSTs the code and <em>code_verifier</em> to the token endpoint; server verifies it matches the earlier challenge.</li>
+        <li><strong>Tokens issued</strong>: receive <em>access_token</em> (and possibly <em>id_token</em>); store access token per your strategy (here: sessionStorage).</li>
+        <li><strong>API calls</strong>: attach <code>Authorization: Bearer &lt;access_token&gt;</code> to calls (through the UI gateway proxy to <em>news-api</em>).</li>
+        <li><strong>Expiration/Logout</strong>: when the token expires, prompt re-login (or refresh if implemented); logout clears local state and calls the realm logout endpoint.</li>
+      </ol>
+    </div>
+    <p>
+      <button (click)="loadPkceDebug()">Refresh PKCE Details</button>
+      <button (click)="login()" [disabled]="authMode!=='plain'">Start Login (Code+PKCE)</button>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>PKCE Inputs</h4>
+        <ul>
+          <li>code_verifier: <strong>{{ pkceDebug?.verifier || 'n/a' }}</strong></li>
+          <li>code_challenge: <strong>{{ pkceDebug?.challenge || 'n/a' }}</strong></li>
+          <li>method: <strong>{{ pkceDebug?.challenge_method || 'n/a' }}</strong></li>
+        </ul>
+        <h4>Auth Request</h4>
+        <pre>{{ pkceDebug?.auth_url || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Token Request (POST)</h4>
+        <pre>{{ pkceDebug?.token_request | json }}</pre>
+        <h4>Token Response</h4>
+        <pre>{{ pkceDebug?.token_response | json }}</pre>
+      </div>
+    </div>
   </div>
 
   <!-- Interceptor: Attach placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='interceptor'">
     <h3>HTTP Interceptor: Attach</h3>
-    <p>Coming soon: allowlist API origins and automatically attach <code>Authorization: Bearer &lt;access_token&gt;</code> to API calls.</p>
+    <div class="info-panel">
+      <p>
+        This demo uses an Angular <strong>HttpInterceptor</strong> to automatically attach
+        <code>Authorization: Bearer &lt;access_token&gt;</code> to allowlisted API calls (e.g. <code>/api/*</code>).
+        The token is read from sessionStorage where the plain PKCE login stored it.
+      </p>
+      <ul>
+        <li><strong>Allowlist</strong>: only relative <code>/api/...</code> or absolute <code>https://localhost/api/...</code>.</li>
+        <li><strong>Source</strong>: token from <em>sessionStorage</em> key <code>token:news:news-web</code>.</li>
+        <li><strong>Scope</strong>: Interceptor affects Angular <em>HttpClient</em> calls only (not <em>fetch()</em>).</li>
+      </ul>
+      <div class="warning">Interceptor applies <strong>only</strong> to Angular <em>HttpClient</em>.
+        Calls made with <em>fetch()</em> do <strong>not</strong> use the interceptor and will not have the header automatically attached.
+        Use the buttons below (HttpClient) to see the attached <code>Authorization</code> header.
+      </div>
+    </div>
+    <p>
+      <button (click)="intHealthzHttp()">Healthz via HttpClient</button>
+      <br>
+      <button (click)="intValidateToken()" [disabled]="!loggedIn">Validate via HttpClient</button>
+      <button (click)="intFetchRss()" [disabled]="!loggedIn">Fetch RSS via HttpClient</button>
+    </p>
+    <div class="info-panel">
+      <p>
+        Interceptor attached Authorization? <strong>{{ intAttached ? 'Yes' : 'No' }}</strong>
+        <span *ngIf="intLastUrl">(last URL: <code>{{ intLastUrl }}</code>)</span>
+      </p>
+      <p *ngIf="intLastToken">
+        <!-- Attached token toggle removed (redundant with header display) -->
+      </p>
+      <div *ngIf="intLastHeader">
+        <h4>Authorization Header</h4>
+        <pre>{{ intLastHeader }}</pre>
+      </div>
+    </div>
+    <div *ngIf="intValidation">
+      <h4>Validation (interceptor)</h4>
+      <pre>{{ intValidation | json }}</pre>
+    </div>
+    <div *ngIf="intRss">
+      <h4>RSS (interceptor)</h4>
+      <pre>{{ intRss | json }}</pre>
+    </div>
+    <div *ngIf="intAdminStatus !== null">
+      <h4>Admin Ping (interceptor)</h4>
+      <p>Status: {{ intAdminStatus }}</p>
+      <pre>{{ intAdminBody | json }}</pre>
+    </div>
+    <div *ngIf="intHealthz">
+      <h4>Healthz (interceptor)</h4>
+      <pre>{{ intHealthz | json }}</pre>
+    </div>
   </div>
 
   <!-- Refresh flow placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='refresh'">
     <h3>401 → Refresh → Retry</h3>
-    <p>Coming soon: single refresh-in-flight guard, queue concurrent requests, and safe retry logic without loops or storms.</p>
+    <div class="info-panel">
+      <p>
+        When a protected HTTP call returns <strong>401 Unauthorized</strong>, the interceptor will attempt a
+        <strong>refresh_token</strong> exchange. On success, it retries the original request with the new
+        <code>Authorization</code> header. A single refresh is kept <em>in-flight</em> to prevent storms,
+        and concurrent requests wait for the outcome.
+      </p>
+      <ul>
+        <li><strong>Demo</strong>: simulate an <em>expired/invalid</em> access token, then call a protected endpoint via HttpClient.</li>
+        <li><strong>Note</strong>: fetch() bypasses interceptors — use the buttons below.</li>
+      </ul>
+      <div class="warning">
+        Refresh helps when the <em>access token</em> is expired/invalid but a valid <em>refresh token</em> is still present.
+        It will <strong>not</strong> fix:<br>
+        — Missing bearer (no Authorization header attached)<br>
+        — Wrong issuer/audience claims<br>
+        — Malformed/unsigned tokens that your IdP rejects on refresh as well<br>
+        — Authorization failures like 403 (e.g., missing required realm roles)
+      </div>
+      <p>
+        The <strong>refresh token</strong> is used by the client (browser) to call the IdP’s token endpoint, not the API.
+        After a <em>401 Unauthorized</em> due to an expired access token, the client can refresh, get a new access token, and retry.
+      </p>
+      <p>
+        <strong>Why you rarely see it:</strong> Good UX proactively refreshes slightly before expiry (or uses silent re-auth),
+        so requests don’t collide with expiry.
+      </p>
+    </div>
+    <p>
+      <button (click)="forceExpireToken()">Simulate expired access token</button>
+      <button (click)="intFetchRssRefreshDemo()" [disabled]="!loggedIn">Fetch RSS via HttpClient (refresh demo)</button>
+      <button (click)="rotateRefreshTokenNow()" [disabled]="!loggedIn">Rotate tokens now (refresh grant)</button>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>Access Token (current)</h4>
+        <pre>{{ refreshAccessToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Refresh Token (current)</h4>
+        <pre>{{ refreshRefreshToken || 'n/a' }}</pre>
+      </div>
+    </div>
+    <div *ngIf="intRss">
+      <h4>RSS (after refresh)</h4>
+      <pre>{{ intRss | json }}</pre>
+    </div>
   </div>
 
   <!-- Storage options placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='storage'">
     <h3>Storage Options</h3>
-    <p>Coming soon: compare in-memory, sessionStorage, localStorage, and HttpOnly cookies (via BFF) with their tradeoffs and XSS/CSRF implications.</p>
+    <div class="info-panel">
+      <h4>Overview</h4>
+      <ul>
+        <li><strong>Memory</strong>: token lives only in this Angular runtime; disappears on reload.</li>
+        <li><strong>sessionStorage</strong>: per-tab storage; cleared when the tab closes; not shared across tabs.</li>
+        <li><strong>localStorage</strong>: persists across tabs and browser restarts on the same origin.</li>
+        <li><strong>HttpOnly Cookie (BFF)</strong>: cookie is not readable by JS; server (BFF) uses it to call APIs. <em>Out of scope in this project.</em></li>
+      </ul>
+      <h4>Security</h4>
+      <ol>
+        <li><strong>HttpOnly Cookie (BFF)</strong> — most secure: tokens never exposed to JavaScript; requires CSRF protections and cookie hardening.</li>
+        <li><strong>Memory</strong> — safer for SPAs: no persistence; vulnerable only while page is loaded (still exposed to XSS).</li>
+        <li><strong>sessionStorage</strong> — moderate: per-tab and cleared on close, but readable by JavaScript and survives reload in that tab.</li>
+        <li><strong>localStorage</strong> — least secure: persistent and shared across tabs; fully readable by JavaScript (highest XSS persistence risk).</li>
+      </ol>
+      <h5>How to view in DevTools</h5>
+      <ul>
+        <li><strong>localStorage</strong>: Open DevTools → Application → Local Storage → your origin; look for key <code>token:news:news-web</code>. Or run <code>localStorage.getItem('token:news:news-web')</code> in the Console.</li>
+        <li><strong>Memory</strong>: Not stored in Web Storage. After clicking <em>Save current access token to selected</em> with <em>Memory</em> chosen, see the “Memory” box below. You can also make a protected call and inspect the <code>Authorization</code> header in the Network tab, or check the Basics → Interceptor panel.</li>
+      </ul>
+      <h5>Attacker POV (runtime JS)</h5>
+      <ul>
+        <li>If a malicious script runs in-page (XSS/extension), it can capture in‑memory tokens by <em>hooking request headers</em> set by Angular HttpClient (XHR) or by reading the Network details.</li>
+      </ul>
+      <p *ngIf="isDev">
+        <button (click)="runHeaderHook()" [disabled]="headerHookEnabled">{{ headerHookEnabled ? 'XHR hook enabled' : 'Run demo XHR hook (dev)' }}</button>
+        <button (click)="runHookTestCall()" style="margin-left:8px;">Run test call (Healthz)</button>
+      </p>
+      <pre>/* Example: log Authorization headers set on XHR (Angular HttpClient uses XHR) */
+const orig = XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader = function(k, v) &#123;
+  if ((k || '').toLowerCase() === 'authorization') console.log('[stolen]', v);
+  return orig.apply(this, arguments);
+&#125;;</pre>
+      <div class="warning">
+        Tokens in browser storage (session/local) are accessible to JavaScript and therefore vulnerable to XSS. Use a strict CSP and safe coding practices, or consider a BFF pattern with HttpOnly cookies.
+      </div>
+      <div class="info-panel">
+        <h4>What is BFF + HttpOnly?</h4>
+        <p>
+          <strong>BFF (Backend-for-Frontend)</strong> is a small server that handles OAuth/OIDC with the IdP and stores session state in an <strong>HttpOnly</strong> cookie. The browser never sees tokens; the BFF adds auth when calling downstream APIs. HttpOnly cookies are sent by the browser automatically, but are not readable by JavaScript, which mitigates token theft via XSS.
+          <br />
+          <strong>Note:</strong> This demo is a client-side SPA exercise and <em>does not implement BFF</em>. We include the concept for comparison only.
+        </p>
+      </div>
+    </div>
+
+    <h4>Select Storage Strategy</h4>
+    <div class="spaced">
+      <label><input type="radio" name="storageStrategy" (change)="storageSelect('memory')" [checked]="storageStrategy==='memory'" /> Memory</label>
+      <label style="margin-left:12px;"><input type="radio" name="storageStrategy" (change)="storageSelect('session')" [checked]="storageStrategy==='session'" /> sessionStorage</label>
+      <label style="margin-left:12px;"><input type="radio" name="storageStrategy" (change)="storageSelect('local')" [checked]="storageStrategy==='local'" /> localStorage</label>
+    </div>
+
+    <p>
+      <button (click)="storageSaveToSelected()" [disabled]="!accessToken">Save current access token to selected</button>
+      <button (click)="storageClearSelected()">Clear selected storage</button>
+      <button (click)="storageRefreshView()">Refresh view</button>
+    </p>
+
+    <div class="grid">
+      <div>
+        <h4>Memory</h4>
+        <pre>{{ storageMemToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>sessionStorage</h4>
+        <pre>{{ storageSessionToken || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>localStorage</h4>
+        <pre>{{ storageLocalToken || 'n/a' }}</pre>
+      </div>
+    </div>
   </div>
 
-  <!-- Idle vs Expiry placeholder -->
+  <!-- Idle vs Expiry -->
   <div class="tab-content" *ngIf="selectedLabTab==='idle'">
     <h3>Idle vs Expiration</h3>
-    <p>Coming soon: show token expiration vs user idle session timers and how to implement idle logout UX.</p>
+    <div class="warning" *ngIf="disableExpiryLogout && expiryToastVisible">
+      {{ expiryToastMessage }}
+      <button (click)="rotateRefreshTokenNow()" style="margin-left:8px;">Refresh now</button>
+      <button (click)="dismissExpiryToast()" style="margin-left:4px;">Dismiss</button>
+    </div>
+    <div class="info-panel">
+      <p>
+        Access tokens expire based on <em>exp</em>, regardless of user activity. Idle timers are a <em>UX policy</em> — after
+        <strong>no user activity</strong> for a threshold, log out or re-auth. This demo tracks both clocks so you can see
+        how they interact.
+      </p>
+    </div>
+    <div class="grid">
+      <div>
+        <h4>Controls</h4>
+        <div class="spaced">
+          <label>Idle timeout (seconds): </label>
+          <input type="number" [(ngModel)]="idleTimeoutSec" min="10" style="width:120px;" />
+        </div>
+        <div>
+          <label><input type="checkbox" [(ngModel)]="idleAutoLogout" /> Auto-logout on idle</label>
+        </div>
+        <div style="margin-top:6px;">
+          <label><input type="checkbox" [(ngModel)]="disableExpiryLogout" (change)="applyExpiryLogoutSetting()" /> Don't auto-logout on token expiry (lab)</label>
+        </div>
+        <p class="spaced">
+          <button (click)="idleToggle()">{{ idleEnabled ? 'Disable Idle Monitor' : 'Enable Idle Monitor' }}</button>
+          <button (click)="recordActivitySimulate()" [disabled]="!idleEnabled" style="margin-left:8px;">Simulate activity</button>
+        </p>
+      </div>
+      <div>
+        <h4>Status</h4>
+        <ul>
+          <li>Idle monitor: <strong>{{ idleEnabled ? 'enabled' : 'disabled' }}</strong></li>
+          <li>Last activity: <strong>{{ lastActivityAt ? (lastActivityAt | date:'medium') : 'n/a' }}</strong></li>
+          <li>Idle remaining: <strong>{{ idleRemainingSec !== null ? idleRemainingSec + 's' : 'n/a' }}</strong>
+            <span *ngIf="idleEnabled && idleRemainingSec !== null && idleRemainingSec <= idleWarnSeconds" style="color:darkorange">(near idle)</span>
+          </li>
+          <li>Access token remaining: <strong>{{ accessTokenExpiresIn !== null ? accessTokenExpiresIn + 's' : 'n/a' }}</strong></li>
+        </ul>
+      </div>
+    </div>
+    <div class="warning" *ngIf="idleEnabled && idleRemainingSec === 0">
+      Idle threshold reached. <span *ngIf="idleAutoLogout">Logged out automatically.</span><span *ngIf="!idleAutoLogout">Auto-logout disabled.</span>
+    </div>
   </div>
 
   <!-- Multi-tab sync placeholder -->
   <div class="tab-content" *ngIf="selectedLabTab==='multitab'">
     <h3>Multi-Tab Sync</h3>
-    <p>Coming soon: coordinate auth state with BroadcastChannel, avoid refresh races, and propagate logout.</p>
+    <div class="info-panel">
+      <p>
+        Coordinate auth state across browser <strong>tabs/windows</strong> using <strong>BroadcastChannel</strong> with a localStorage fallback.
+        This demo broadcasts <em>logout</em> and shows received events.
+      </p>
+      <h4>How to try it</h4>
+      <ol>
+        <li>Open two tabs or windows to <a href="https://localhost:4200" target="_blank" rel="noopener">https://localhost:4200</a>.</li>
+        <li>In both, go to JWT Lab → Multi-Tab Sync, then check “Enable Multi-Tab Sync”.</li>
+        <li>Click “Ping other tabs” and watch the events list update in both tabs.</li>
+        <li>Click “Broadcast logout” — the other tab should immediately log out as well.</li>
+        <li>Logging out via the usual button will broadcast if multi-tab is enabled.</li>
+      </ol>
+    </div>
+    <div class="grid">
+      <div>
+        <h4>Controls</h4>
+        <p>
+          <label><input type="checkbox" [(ngModel)]="multitabEnabled" (ngModelChange)="multitabToggle($event)" /> Enable Multi-Tab Sync</label>
+          <br />
+          <em>Enable in both tabs/windows for messages to be received.</em>
+        </p>
+        <p>
+          <button (click)="multiBroadcast('ping')" [disabled]="!multitabEnabled">Ping other tabs</button>
+          <button (click)="multiBroadcast('logout')" [disabled]="!multitabEnabled" style="margin-left:8px;">Broadcast logout</button>
+        </p>
+      </div>
+      <div>
+        <h4>Events</h4>
+        <ul>
+          <li *ngFor="let ev of multiLog">{{ ev.at | date:'mediumTime' }} — {{ ev.type }} from {{ ev.from }}</li>
+        </ul>
+        <p *ngIf="!multiLog.length">No events yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Silent re-auth placeholder -->
+  <div class="tab-content" *ngIf="selectedLabTab==='silent'">
+    <h3>Silent Re-auth (prompt=none)</h3>
+    <div class="warning">Dev-only: Attempt background re-auth when the IdP session is still valid.</div>
+    <div class="info-panel">
+      <p>
+        Silent re-auth uses an off-screen frame to call the authorization endpoint with <code>prompt=none</code>.
+        If the user still has a valid SSO session at the IdP, the realm can issue a new authorization code without
+        UI, which the SPA exchanges for fresh tokens. This avoids interrupting the user when access tokens expire.
+      </p>
+      <h4>Constraints</h4>
+      <ul>
+        <li>CORS and cookies must permit the IdP to recognize the session.</li>
+        <li>IdP config must allow <em>prompt=none</em> and the redirect context.</li>
+        <li>Failure should gracefully fall back to interactive login.</li>
+      </ul>
+    </div>
+    <p>
+      <button (click)="startSilentReauth()" [disabled]="silentInFlight || authMode!=='plain'">Start Silent Re-auth</button>
+      <span *ngIf="silentInFlight" style="margin-left:8px;">Attempting…</span>
+      <span *ngIf="silentError" class="error" style="margin-left:8px;">{{ silentError }}</span>
+    </p>
+    <div class="grid">
+      <div>
+        <h4>Frame URL</h4>
+        <pre>{{ silentFrameUrl || 'n/a' }}</pre>
+      </div>
+      <div>
+        <h4>Result</h4>
+        <pre>{{ silentLastResult | json }}</pre>
+      </div>
+    </div>
   </div>
   </div>
 </div>

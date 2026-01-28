@@ -25,6 +25,8 @@ export interface AuthProvider {
   fetchRss(): Promise<any>;
   adminPing(): Promise<{ status: number; body: any }>;
   subscribe(listener: (state: AuthState) => void): void;
+  // Dev-only: expose PKCE and request/response debug details for the lab
+  getPkceDebug?(): any;
 }
 
 export function createAuthProvider(mode: AuthMode): AuthProvider {
@@ -52,4 +54,5 @@ class NotImplementedProvider implements AuthProvider {
   async fetchRss(): Promise<any> { throw new Error(`Auth mode \"${this.mode}\" not implemented`); }
   async adminPing(): Promise<{ status: number; body: any }> { throw new Error(`Auth mode \"${this.mode}\" not implemented`); }
   subscribe(_listener: (state: AuthState) => void): void { /* no-op */ }
+  getPkceDebug?(): any { return null; }
 }

@@ -1,6 +1,6 @@
 import { AuthConfig, AuthProvider, AuthState } from './provider';
 import { computeCodeChallenge, decodeJwt, decodeJwtExp, generateCodeVerifier } from '../utils';
-import { pkceKey, tokenKey } from './storage';
+import { pkceKey, tokenKey, refreshKey } from './storage';
 
 export class PlainAuthProvider implements AuthProvider {
   private cfg!: AuthConfig;
@@ -10,6 +10,13 @@ export class PlainAuthProvider implements AuthProvider {
   private tokenPayload: any = null;
   private tokenTimer: any = null;
   private subscribers: Array<(s: AuthState) => void> = [];
+  // Dev-only PKCE + flow debug
+  private pkceVerifier: string | null = null;
+  private pkceChallenge: string | null = null;
+  private lastAuthUrl: string | null = null;
+  private lastAuthState: string | null = null;
+  private lastTokenRequest: Record<string, string> | null = null;
+  private lastTokenResponse: any = null;
 
   async init(config: AuthConfig): Promise<AuthState> {
     this.cfg = config;
@@ -18,11 +25,21 @@ export class PlainAuthProvider implements AuthProvider {
       const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
       this.apiBase = port === '4200' ? 'https://localhost' : '';
     } catch (_) { this.apiBase = ''; }
+    // Load PKCE verifier (if present) and compute challenge for display
+    try {
+      const storedVerifier = sessionStorage.getItem(pkceKey(this.cfg.realm, this.cfg.clientId));
+      if (storedVerifier) {
+        this.pkceVerifier = storedVerifier;
+        // compute challenge for lab display
+        computeCodeChallenge(storedVerifier).then(ch => { this.pkceChallenge = ch; }).catch(() => {});
+      }
+    } catch (_) {}
     try {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
+      const state = params.get('state') || null;
       if (code) {
-        await this.exchangeCodeForToken(code);
+        await this.exchangeCodeForToken(code, state || undefined);
         // Clean URL after handling login
         history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       } else {
@@ -50,15 +67,48 @@ export class PlainAuthProvider implements AuthProvider {
 
   login(): void {
     const codeVerifier = generateCodeVerifier();
+    this.pkceVerifier = codeVerifier;
     computeCodeChallenge(codeVerifier).then(codeChallenge => {
+      this.pkceChallenge = codeChallenge;
       try { sessionStorage.setItem(pkceKey(this.cfg.realm, this.cfg.clientId), codeVerifier); } catch (_) {}
       const url = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/auth` +
         `?client_id=${encodeURIComponent(this.cfg.clientId)}` +
         `&redirect_uri=${encodeURIComponent(this.cfg.redirectUri)}` +
         `&response_type=code&scope=${encodeURIComponent('openid profile email')}` +
         `&code_challenge_method=S256&code_challenge=${encodeURIComponent(codeChallenge)}`;
+      this.lastAuthUrl = url;
+      this.lastAuthState = null;
       window.location.href = url;
     });
+  }
+
+  // Build a prompt=none auth URL suitable for an off-screen iframe
+  getSilentAuthUrl(): string {
+    // Ensure PKCE verifier/challenge exist
+    const verifier = this.pkceVerifier || generateCodeVerifier();
+    this.pkceVerifier = verifier;
+    try { sessionStorage.setItem(pkceKey(this.cfg.realm, this.cfg.clientId), verifier); } catch (_) {}
+    // Compute challenge if missing (best-effort)
+    if (!this.pkceChallenge) {
+      try { computeCodeChallenge(verifier).then(ch => { this.pkceChallenge = ch; }).catch(() => {}); } catch {}
+    }
+    const ch = this.pkceChallenge;
+    const base = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/auth`;
+    const params: string[] = [
+      `client_id=${encodeURIComponent(this.cfg.clientId)}`,
+      `redirect_uri=${encodeURIComponent(this.cfg.redirectUri)}`,
+      `response_type=code`,
+      `scope=${encodeURIComponent('openid profile email')}`,
+      `prompt=none`,
+      `state=silent`
+    ];
+    if (ch) {
+      params.push(`code_challenge_method=S256`, `code_challenge=${encodeURIComponent(ch)}`);
+    }
+    const url = `${base}?${params.join('&')}`;
+    this.lastAuthUrl = url;
+    this.lastAuthState = 'silent';
+    return url;
   }
 
   logout(): void {
@@ -66,6 +116,7 @@ export class PlainAuthProvider implements AuthProvider {
     try {
       sessionStorage.removeItem(pkceKey(this.cfg.realm, this.cfg.clientId));
       sessionStorage.removeItem(tokenKey(this.cfg.realm, this.cfg.clientId));
+      sessionStorage.removeItem(refreshKey(this.cfg.realm, this.cfg.clientId));
     } catch (_) {}
     const url = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/logout` +
       `?client_id=${encodeURIComponent(this.cfg.clientId)}` +
@@ -123,7 +174,7 @@ export class PlainAuthProvider implements AuthProvider {
   }
 
 
-  private async exchangeCodeForToken(code: string) {
+  private async exchangeCodeForToken(code: string, state?: string) {
     const verifier = sessionStorage.getItem(pkceKey(this.cfg.realm, this.cfg.clientId));
     if (!verifier) throw new Error('Missing PKCE verifier');
     const body = new URLSearchParams();
@@ -132,6 +183,13 @@ export class PlainAuthProvider implements AuthProvider {
     body.set('code', code);
     body.set('redirect_uri', this.cfg.redirectUri);
     body.set('code_verifier', verifier);
+    this.lastTokenRequest = {
+      grant_type: 'authorization_code',
+      client_id: this.cfg.clientId,
+      code,
+      redirect_uri: this.cfg.redirectUri,
+      code_verifier: verifier,
+    };
     const tokenUrl = `${this.cfg.kcBase}/realms/${this.cfg.realm}/protocol/openid-connect/token`;
     const resp = await fetch(tokenUrl, {
       method: 'POST',
@@ -143,12 +201,28 @@ export class PlainAuthProvider implements AuthProvider {
       throw new Error(`Token endpoint ${resp.status}: ${txt}`);
     }
     const json = await resp.json();
+    this.lastTokenResponse = json;
     this.accessToken = json.access_token || null;
+    const refresh = json.refresh_token || null;
     this.accessTokenExp = decodeJwtExp(this.accessToken);
     this.tokenPayload = decodeJwt(this.accessToken);
-    try { if (this.accessToken) sessionStorage.setItem(tokenKey(this.cfg.realm, this.cfg.clientId), this.accessToken); } catch (_) {}
+    try {
+      if (this.accessToken) sessionStorage.setItem(tokenKey(this.cfg.realm, this.cfg.clientId), this.accessToken);
+      if (refresh) sessionStorage.setItem(refreshKey(this.cfg.realm, this.cfg.clientId), refresh);
+    } catch (_) {}
     this.startTokenExpiryWatcher();
     this.emit();
+    // If running inside an iframe or in a silent state, notify parent window
+    try {
+      const inFrame = window.self !== window.top;
+      const isSilent = (state === 'silent') || (this.lastAuthState === 'silent');
+      if (inFrame || isSilent) {
+        const payload: any = { type: 'silent-refresh', access: this.accessToken, refresh };
+        window.parent && window.parent.postMessage(payload, window.location.origin);
+        // Also write localStorage for fallback inspectors
+        try { localStorage.setItem('auth:bc', JSON.stringify({ from: 'silent', type: 'refresh', payload: { access: this.accessToken }, at: Date.now() })); } catch {}
+      }
+    } catch (_) {}
   }
 
   private startTokenExpiryWatcher() {
@@ -157,6 +231,16 @@ export class PlainAuthProvider implements AuthProvider {
       if (!this.accessTokenExp) return;
       const now = Math.floor(Date.now() / 1000);
       if (now >= this.accessTokenExp) {
+        // Lab toggle: allow disabling auto-logout on access expiry
+        let disableLogout = false;
+        try { disableLogout = sessionStorage.getItem('lab:disable-expiry-logout') === '1'; } catch {}
+        if (disableLogout) {
+          // Keep current token value (may be expired); mark state error but do not force logout.
+          // Stop watcher; the interceptor can refresh on next API call.
+          this.emit({ loggedIn: !!this.accessToken, accessToken: this.accessToken, accessTokenExp: this.accessTokenExp, tokenPayload: this.tokenPayload, error: 'Access token expired — will refresh on next API call.' });
+          this.stopTokenExpiryWatcher();
+          return;
+        }
         this.accessToken = null;
         this.accessTokenExp = null;
         this.tokenPayload = null;
@@ -172,5 +256,19 @@ export class PlainAuthProvider implements AuthProvider {
       clearInterval(this.tokenTimer);
       this.tokenTimer = null;
     }
+  }
+
+  // Dev-only: expose PKCE and flow details for the lab UI
+  getPkceDebug(): any {
+    return {
+      mode: 'plain',
+      verifier: this.pkceVerifier,
+      challenge: this.pkceChallenge,
+      challenge_method: this.pkceChallenge ? 'S256' : null,
+      auth_url: this.lastAuthUrl,
+      auth_state: this.lastAuthState,
+      token_request: this.lastTokenRequest,
+      token_response: this.lastTokenResponse,
+    };
   }
 }

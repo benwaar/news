@@ -24,7 +24,7 @@
       "request": "launch",
       "url": "https://localhost:4200",
       "webRoot": "${workspaceFolder}/services/ui-news",
-      "preLaunchTask": "ui-news: npm start",
+      "preLaunchTask": "ui-news: start with nvm",
       "runtimeArgs": [
         "--ignore-certificate-errors",
         "--allow-insecure-localhost"

@@ -1,8 +1,12 @@
-import { Component } from '@angular/core';
+import { Component, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { AUTH_MODES, AUTH_MODE_STORAGE_KEY, AuthMode } from './auth/modes';
+import { AuthTokenService } from './auth/token.service';
+import { tokenKey, refreshKey, STORAGE_STRATEGY_KEY } from './auth/storage';
 import { AuthProvider, createAuthProvider, AuthConfig } from './auth/provider';
+import { RefreshService } from './auth/refresh.service';
 import { createJwtHS256, decodeJwtParts, verifyJwtHS256, computeExpiresInSeconds, normalizeAudience, extractRoles, fetchRealmJwks, verifyJwtRS256WithJwk } from './utils';
 
 @Component({
@@ -56,12 +60,13 @@ export class AppComponent {
   labTabs = [
     { id: 'hs256-basic', label: 'HS256 (basic)', ready: true },
     { id: 'rs256-jwks', label: 'RS256 + JWKS', ready: true },
-    { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: false },
-    { id: 'interceptor', label: 'Interceptor: Attach', ready: false },
-    { id: 'refresh', label: '401→Refresh→Retry', ready: false },
-    { id: 'storage', label: 'Storage Options', ready: false },
-    { id: 'idle', label: 'Idle vs Expiry', ready: false },
-    { id: 'multitab', label: 'Multi-Tab Sync', ready: false },
+    { id: 'oidc-pkce', label: 'OIDC Code+PKCE', ready: true },
+    { id: 'interceptor', label: 'Interceptor: Attach', ready: true },
+    { id: 'refresh', label: '401→Refresh→Retry', ready: true },
+    { id: 'storage', label: 'Storage Options', ready: true },
+    { id: 'idle', label: 'Idle vs Expiry', ready: true },
+    { id: 'multitab', label: 'Multi-Tab Sync', ready: true },
+    { id: 'silent', label: 'Silent Re-auth', ready: true },
   ];
   selectedLabTab = 'hs256-basic';
 
@@ -91,25 +96,87 @@ export class AppComponent {
   rsError = '';
   rsJwks: JsonWebKey[] = [];
 
-  constructor(){
+  // OIDC Code + PKCE (lab) debug state
+  pkceDebug: any = null;
+  // Silent re-auth (prompt=none)
+  silentInFlight = false;
+  silentError: string = '';
+  silentFrameUrl: string | null = null;
+  silentLastResult: any = null;
+
+  // Interceptor lab state
+  intTokenAttached = false; // quick probe after a call
+  intValidation: any = null;
+  intRss: any = null;
+  intAdminStatus: number | null = null;
+  intAdminBody: any = null;
+  // Interceptor debug panel
+  intAttached: boolean = false;
+  intLastUrl: string | null = null;
+  intLastHeader: string | null = null;
+  intHealthz: any = null;
+  intLastToken: string | null = null;
+  intShowAttachedToken: boolean = false;
+  // Refresh tab token view
+  refreshAccessToken: string | null = null;
+  refreshRefreshToken: string | null = null;
+  // Storage tab state
+  storageStrategy: 'memory' | 'session' | 'local' = 'session';
+  storageMemToken: string | null = null;
+  storageSessionToken: string | null = null;
+  storageLocalToken: string | null = null;
+
+  // Idle monitor state
+  idleEnabled = false;
+  idleTimeoutSec = 10; // default idle timeout seconds
+  idleWarnSeconds = 10; // show warning when remaining <= this
+  idleRemainingSec: number | null = null;
+  idleAutoLogout = false;
+  lastActivityAt: Date | null = null;
+  private idleTimer: any = null;
+  // Lab toggle: disable provider auto-logout on access expiry
+  disableExpiryLogout = true;
+  // Toast/banner for expiry notice
+  expiryToastVisible = false;
+  expiryToastMessage = 'Access token expired — will refresh on next API call.';
+
+  // Multi-tab sync (BroadcastChannel + storage fallback)
+  multitabEnabled = false;
+  tabId: string = Math.random().toString(36).slice(2) + '-' + Date.now();
+  private bc: BroadcastChannel | null = null;
+  private bcPollTimer: any = null;
+  private bcLastRaw: string | null = null;
+  multiLastEvent: any = null;
+  multiLog: Array<{ at: Date; from: string; type: string; payload?: any }> = [];
+
+  constructor(private http: HttpClient, private authTokenSvc: AuthTokenService, private refreshSvc: RefreshService, private zone: NgZone){
     // Determine environment by port (dev: 4200, prod: 80)
     this.currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     this.isDev = this.currentPort === '4200';
     this.envLabel = this.isDev ? `DEV (${this.currentPort})` : `PROD (${this.currentPort})`;
     this.apiLabel = this.isDev ? 'API: localhost:9000' : 'API: via /api';
     fetch('/api/healthz').then(r => r.json()).then(j => this.health = j).catch(e => this.health = { error: String(e) });
-    // Load selected auth mode (default 'plain')
-    const savedMode = sessionStorage.getItem(AUTH_MODE_STORAGE_KEY) as AuthMode | null;
-    if (savedMode && this.authModes.includes(savedMode)) this.authMode = savedMode;
+    // Force plain provider; selector removed and lab is plain-only
+    this.authMode = 'plain';
+    // Load saved storage strategy preference
+    try {
+      const savedStrategy = sessionStorage.getItem(STORAGE_STRATEGY_KEY) as 'memory' | 'session' | 'local' | null;
+      if (savedStrategy === 'memory' || savedStrategy === 'session' || savedStrategy === 'local') {
+        this.storageStrategy = savedStrategy;
+      }
+    } catch (_) {}
     // Initialize provider based on mode
     this.provider = createAuthProvider(this.authMode);
     const cfg: AuthConfig = { realm: this.realm, kcBase: this.kcBase, clientId: this.clientId, redirectUri: this.redirectUri };
     this.provider.init(cfg).then(state => {
       this.loggedIn = state.loggedIn;
       this.accessToken = state.accessToken;
+      this.authTokenSvc.setToken(this.accessToken);
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -117,10 +184,38 @@ export class AppComponent {
     this.provider.subscribe(state => {
       this.loggedIn = state.loggedIn;
       this.accessToken = state.accessToken;
+      this.authTokenSvc.setToken(this.accessToken);
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.updateBasicsDerived();
+      this.loadPkceDebug();
+      this.refreshInterceptorDebug();
+    });
+    // Load lab toggle from sessionStorage
+    try {
+      const v = sessionStorage.getItem('lab:disable-expiry-logout');
+      if (v === '0') this.disableExpiryLogout = false;
+      else if (v === '1') this.disableExpiryLogout = true;
+      else sessionStorage.setItem('lab:disable-expiry-logout', this.disableExpiryLogout ? '1' : '0');
+    } catch {}
+    // Fallback storage listener for multi-tab (Safari or disabled BroadcastChannel)
+    window.addEventListener('storage', (e) => {
+      try {
+        if (e.key !== 'auth:bc' || !e.newValue) return;
+        const msg = JSON.parse(e.newValue || '{}');
+        this.zone.run(() => this.multiHandle(msg));
+      } catch {}
+    });
+    // Listen for silent refresh results from iframe
+    window.addEventListener('message', (ev: MessageEvent) => {
+      try {
+        const data: any = ev.data || {};
+        if (ev.origin !== window.location.origin) return;
+        if (data && data.type === 'silent-refresh') {
+          this.zone.run(() => this.applySilentResult(data));
+        }
+      } catch {}
     });
   }
 
@@ -144,6 +239,8 @@ export class AppComponent {
       this.accessTokenExp = state.accessTokenExp;
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
+      this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     }).catch(err => {
       this.error = String(err);
     });
@@ -154,12 +251,17 @@ export class AppComponent {
       this.tokenPayload = state.tokenPayload;
       this.error = state.error || '';
       this.updateBasicsDerived();
+      this.loadPkceDebug();
+      this.refreshInterceptorDebug();
     });
   }
 
   async login() { this.provider.login(); }
 
-  logout() { this.provider.logout(); }
+  logout() {
+    try { if (this.multitabEnabled) this.multiBroadcast('logout'); } catch {}
+    this.provider.logout();
+  }
 
   async validateToken() {
     this.error = '';
@@ -259,6 +361,81 @@ export class AppComponent {
     this.selectedMainTab = id;
   }
 
+  // ----- OIDC Code + PKCE (lab) -----
+  loadPkceDebug() {
+    try {
+      const anyProvider: any = this.provider as any;
+      if (typeof anyProvider.getPkceDebug === 'function') {
+        this.pkceDebug = anyProvider.getPkceDebug();
+      }
+    } catch (e) {
+      this.error = 'PKCE debug failed: ' + String(e);
+    }
+  }
+
+  // ----- Silent Re-auth (prompt=none) -----
+  startSilentReauth() {
+    this.silentError = '';
+    if (this.silentInFlight) return;
+    try {
+      const anyProvider: any = this.provider as any;
+      if (typeof anyProvider.getSilentAuthUrl !== 'function') {
+        this.silentError = 'Silent auth not available for this mode.';
+        return;
+      }
+      const url: string = anyProvider.getSilentAuthUrl();
+      this.silentFrameUrl = url;
+      this.silentInFlight = true;
+      // Create hidden iframe and navigate to prompt=none URL
+      const iframe = document.createElement('iframe');
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.src = url;
+      iframe.onload = () => {
+        // Load fires on initial auth URL navigation; result posts back after redirect
+      };
+      document.body.appendChild(iframe);
+      // Cleanup after 15s in case of failure
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+        if (this.silentInFlight) {
+          this.silentInFlight = false;
+          this.silentError = 'Silent re-auth timeout or blocked.';
+        }
+      }, 15000);
+    } catch (e) {
+      this.silentError = String(e);
+      this.silentInFlight = false;
+    }
+  }
+
+  private applySilentResult(data: any) {
+    try {
+      this.silentInFlight = false;
+      this.silentLastResult = data;
+      const access: string | null = data?.access || null;
+      if (access) {
+        // Update interceptor source and local state
+        this.authTokenSvc.setToken(access);
+        const parts = decodeJwtParts(access);
+        this.accessToken = access;
+        this.accessTokenExp = (typeof parts.payload?.exp === 'number') ? parts.payload.exp : null;
+        this.tokenPayload = parts.payload || null;
+        this.loggedIn = !!access;
+        this.error = '';
+        this.updateBasicsDerived();
+        this.refreshInterceptorDebug();
+      } else {
+        this.silentError = 'Silent re-auth failed: no access token.';
+      }
+    } catch (e) {
+      this.silentError = 'Silent re-auth error: ' + String(e);
+    }
+  }
+
   private stopAccessCountdown() {
     if (this.tokenTimer) {
       try { clearInterval(this.tokenTimer); } catch {}
@@ -280,6 +457,15 @@ export class AppComponent {
   private updateBasicsDerived() {
     // Update countdown
     this.startAccessCountdown();
+    // Toggle expiry toast when using lab mode (no auto-logout)
+    const remaining = this.accessTokenExpiresIn;
+    if (this.disableExpiryLogout && this.loggedIn && remaining === 0) {
+      this.expiryToastVisible = true;
+    } else if (typeof remaining === 'number' && remaining > 0) {
+      this.expiryToastVisible = false;
+    } else if (!this.loggedIn) {
+      this.expiryToastVisible = false;
+    }
     // Update header/claims
     this.accessHeader = this.accessToken ? decodeJwtParts(this.accessToken).header : null;
     const payload: any = this.tokenPayload || null;
@@ -354,5 +540,389 @@ export class AppComponent {
     } catch (e) {
       this.rsError = 'Verify failed: ' + String(e);
     }
+  }
+
+  // ----- Interceptor lab: call APIs via Angular HttpClient -----
+  async intValidateToken() {
+    try {
+      const resp = await this.http.get('/api/token/validate', { observe: 'response' }).toPromise();
+      this.intTokenAttached = !!resp?.headers.get('x-token-attached'); // optional if API echoes; else keep false
+      this.intValidation = resp?.body ?? null;
+    } catch (e: any) {
+      this.intValidation = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async intFetchRss() {
+    try {
+      const body = await this.http.get('/api/rss').toPromise();
+      this.intRss = body ?? null;
+    } catch (e: any) {
+      this.intRss = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+  // ----- Refresh demo helpers -----
+  forceExpireToken() {
+    // Simulate an expired/invalid access token so interceptor attaches it,
+    // receives 401, then triggers refresh using the stored refresh_token.
+    try {
+      const key = 'token:news:news-web';
+      sessionStorage.setItem(key, 'invalid');
+      this.authTokenSvc.setToken('invalid');
+      this.error = '';
+    } catch (_) {}
+    this.refreshInterceptorDebug();
+  }
+
+  async intFetchRssRefreshDemo() {
+    // Same endpoint as intFetchRss, but leave state separate for clarity
+    try {
+      const body = await this.http.get('/api/rss').toPromise();
+      this.intRss = body ?? null;
+    } catch (e: any) {
+      this.intRss = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async rotateRefreshTokenNow() {
+    // Proactively call refresh grant to rotate tokens without forcing a 401
+    try {
+      await this.refreshSvc.refresh();
+    } catch (_) {}
+    this.refreshInterceptorDebug();
+  }
+
+  async intAdminPing() {
+    this.intAdminStatus = null;
+    this.intAdminBody = null;
+    try {
+      const resp = await this.http.get('/api/admin/ping', { observe: 'response' }).toPromise();
+      this.intAdminStatus = resp?.status ?? null;
+      this.intAdminBody = resp?.body ?? null;
+    } catch (e: any) {
+      // Angular throws on non-2xx; capture status/body if present
+      if (e?.status) {
+        this.intAdminStatus = e.status;
+        this.intAdminBody = e.error ?? e.message;
+      } else {
+        this.intAdminBody = { error: String(e?.message ?? e) };
+      }
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  async intHealthzHttp() {
+    try {
+      const body = await this.http.get('/api/healthz').toPromise();
+      this.intHealthz = body ?? null;
+    } catch (e: any) {
+      this.intHealthz = { error: String(e?.message ?? e) };
+    }
+    this.refreshInterceptorDebug();
+  }
+
+  private refreshInterceptorDebug() {
+    this.intAttached = this.authTokenSvc.getLastAttached();
+    this.intLastUrl = this.authTokenSvc.getLastUrl();
+    this.intLastHeader = this.authTokenSvc.getLastAuthHeader();
+    this.intLastToken = this.authTokenSvc.getLastToken();
+    // Update Refresh tab token view
+    try {
+      const tKey = tokenKey(this.realm, this.clientId);
+      const rKey = refreshKey(this.realm, this.clientId);
+      this.refreshAccessToken = sessionStorage.getItem(tKey);
+      this.refreshRefreshToken = sessionStorage.getItem(rKey);
+    } catch (_) {}
+  }
+
+  // Dev helper: hook XHR header setting to demonstrate attacker capture of Authorization
+  headerHookEnabled = false;
+  runHeaderHook() {
+    if (this.headerHookEnabled) return;
+    try {
+      const xhrProto: any = (XMLHttpRequest as any).prototype;
+      if (!xhrProto || !xhrProto.setRequestHeader) return;
+      const original = xhrProto.setRequestHeader;
+      const self = this;
+      xhrProto.setRequestHeader = function(k: any, v: any) {
+        try {
+          if ((k || '').toString().toLowerCase() === 'authorization') {
+            // eslint-disable-next-line no-console
+            console.log('[demo-xhr-hook] captured header:', v);
+            self.intLastHeader = `Authorization: ${v}`;
+          }
+        } catch {}
+        return original.apply(this, arguments as any);
+      };
+      // Also hook fetch for completeness (if HttpClient ever uses fetch)
+      try {
+        const wAny: any = window as any;
+        const origFetch = wAny.fetch?.bind(window);
+        if (origFetch) {
+          wAny.fetch = function(input: any, init: any) {
+            try {
+              // Inspect headers from init or Request object
+              let headers: any = null;
+              if (init && init.headers) headers = init.headers;
+              else if (input && input.headers) headers = input.headers;
+              let auth: string | null = null;
+              if (headers) {
+                try {
+                  if (headers instanceof Headers) {
+                    auth = headers.get('Authorization');
+                  } else if (Array.isArray(headers)) {
+                    for (const [k, v] of headers) { if ((k || '').toLowerCase() === 'authorization') { auth = String(v); break; } }
+                  } else if (typeof headers === 'object') {
+                    for (const k of Object.keys(headers)) { if (k.toLowerCase() === 'authorization') { auth = String((headers as any)[k]); break; } }
+                  }
+                } catch {}
+              }
+              if (auth) {
+                // eslint-disable-next-line no-console
+                console.log('[demo-fetch-hook] captured header:', auth);
+                self.intLastHeader = `Authorization: ${auth}`;
+              }
+            } catch {}
+            return origFetch(input, init);
+          };
+        }
+      } catch {}
+      this.headerHookEnabled = true;
+      // Prepare environment for the demo: use memory, clear others, set in-memory token
+      try {
+        const key = tokenKey(this.realm, this.clientId);
+        try { sessionStorage.removeItem(key); } catch {}
+        try { localStorage.removeItem(key); } catch {}
+        this.storageStrategy = 'memory';
+        try { sessionStorage.setItem(STORAGE_STRATEGY_KEY, 'memory'); } catch {}
+        // Seed a token into memory from best available source
+        let seed: string | null = this.accessToken || null;
+        try { if (!seed) seed = this.authTokenSvc.getToken(); } catch {}
+        try { if (!seed) seed = sessionStorage.getItem(key); } catch {}
+        try { if (!seed) seed = localStorage.getItem(key); } catch {}
+        if (seed) this.authTokenSvc.setToken(seed);
+        this.storageRefreshView();
+      } catch {}
+    } catch {}
+  }
+
+  // Convenience: trigger a safe call to show the hook capturing Authorization
+  runHookTestCall() {
+    if (!this.headerHookEnabled) this.runHeaderHook();
+    this.intHealthzHttp();
+  }
+
+  // ---------- Storage tab helpers ----------
+  storageSelect(strategy: 'memory' | 'session' | 'local') {
+    this.storageStrategy = strategy;
+    try { sessionStorage.setItem(STORAGE_STRATEGY_KEY, strategy); } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageSaveToSelected() {
+    const token = this.accessToken;
+    if (!token) return;
+    const key = tokenKey(this.realm, this.clientId);
+    try {
+      if (this.storageStrategy === 'memory') {
+        this.authTokenSvc.setToken(token);
+      } else if (this.storageStrategy === 'session') {
+        sessionStorage.setItem(key, token);
+      } else if (this.storageStrategy === 'local') {
+        localStorage.setItem(key, token);
+      }
+    } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageClearSelected() {
+    const key = tokenKey(this.realm, this.clientId);
+    try {
+      if (this.storageStrategy === 'memory') {
+        this.authTokenSvc.setToken(null);
+      } else if (this.storageStrategy === 'session') {
+        sessionStorage.removeItem(key);
+      } else if (this.storageStrategy === 'local') {
+        localStorage.removeItem(key);
+      }
+    } catch (_) {}
+    this.storageRefreshView();
+  }
+
+  storageRefreshView() {
+    try {
+      const key = tokenKey(this.realm, this.clientId);
+      this.storageMemToken = this.authTokenSvc.getToken();
+      this.storageSessionToken = sessionStorage.getItem(key);
+      this.storageLocalToken = localStorage.getItem(key);
+    } catch (_) {}
+  }
+
+  // ---------- Idle monitor helpers ----------
+  private startIdleTimer() {
+    this.stopIdleTimer();
+    this.lastActivityAt = new Date();
+    this.idleRemainingSec = this.idleTimeoutSec;
+    this.idleTimer = setInterval(() => {
+      if (!this.lastActivityAt) return;
+      const elapsed = Math.floor((Date.now() - this.lastActivityAt.getTime()) / 1000);
+      const remaining = Math.max(this.idleTimeoutSec - elapsed, 0);
+      this.idleRemainingSec = remaining;
+      if (remaining === 0) {
+        this.stopIdleTimer();
+        if (this.idleAutoLogout && this.loggedIn) {
+          // Trigger provider logout once
+          try { this.logout(); } catch {}
+        }
+      }
+    }, 1000);
+  }
+
+  private stopIdleTimer() {
+    if (this.idleTimer) {
+      try { clearInterval(this.idleTimer); } catch {}
+      this.idleTimer = null;
+    }
+  }
+
+  private bindIdleActivityListeners() {
+    const handler = () => this.recordActivity();
+    window.addEventListener('mousemove', handler);
+    window.addEventListener('keydown', handler);
+    window.addEventListener('click', handler);
+    window.addEventListener('scroll', handler, { passive: true } as any);
+    window.addEventListener('touchstart', handler, { passive: true } as any);
+    // Store a reference to remove later
+    (this as any)._idleHandler = handler;
+  }
+
+  private unbindIdleActivityListeners() {
+    const handler = (this as any)._idleHandler;
+    if (!handler) return;
+    try {
+      window.removeEventListener('mousemove', handler);
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('click', handler);
+      window.removeEventListener('scroll', handler as any);
+      window.removeEventListener('touchstart', handler as any);
+    } catch {}
+    (this as any)._idleHandler = null;
+  }
+
+  idleToggle() {
+    this.idleEnabled = !this.idleEnabled;
+    if (this.idleEnabled) {
+      this.startIdleTimer();
+      this.bindIdleActivityListeners();
+    } else {
+      this.stopIdleTimer();
+      this.unbindIdleActivityListeners();
+      this.idleRemainingSec = null;
+    }
+  }
+
+  recordActivity() {
+    if (!this.idleEnabled) return;
+    this.lastActivityAt = new Date();
+    this.idleRemainingSec = this.idleTimeoutSec;
+  }
+
+  recordActivitySimulate() { this.recordActivity(); }
+
+  applyExpiryLogoutSetting() {
+    try { sessionStorage.setItem('lab:disable-expiry-logout', this.disableExpiryLogout ? '1' : '0'); } catch {}
+  }
+
+  dismissExpiryToast() { this.expiryToastVisible = false; }
+
+  // ---------- Multi-tab sync helpers ----------
+  multitabToggle(value?: boolean) {
+    // Explicitly accept new value from ngModelChange and apply
+    if (typeof value === 'boolean') this.multitabEnabled = value;
+    if (this.multitabEnabled) this.multiInit(); else this.multiClose();
+  }
+
+  private multiInit() {
+    try {
+      if ('BroadcastChannel' in window) {
+        this.bc = new (window as any).BroadcastChannel('news-auth');
+        const bcAny: any = this.bc as any;
+        bcAny.onmessage = (ev: MessageEvent) => {
+          try { this.zone.run(() => this.multiHandle(ev.data)); } catch {}
+        };
+      } else {
+        this.bc = null;
+      }
+      // Poll fallback: detect localStorage changes even if 'storage' events don't fire
+      if (!this.bcPollTimer) {
+        this.bcLastRaw = null;
+        this.bcPollTimer = setInterval(() => {
+          try {
+            const raw = localStorage.getItem('auth:bc');
+            if (raw && raw !== this.bcLastRaw) {
+              this.bcLastRaw = raw;
+              const msg = JSON.parse(raw);
+              this.zone.run(() => this.multiHandle(msg));
+            }
+          } catch {}
+        }, 1000);
+      }
+      // Announce presence
+      this.multiBroadcast('ping');
+    } catch {}
+  }
+
+  private multiClose() {
+    try { if (this.bc) { this.bc.close(); this.bc = null; } } catch {}
+    try { if (this.bcPollTimer) { clearInterval(this.bcPollTimer); this.bcPollTimer = null; } } catch {}
+  }
+
+  multiBroadcast(type: 'logout' | 'refresh' | 'ping', payload?: any) {
+    const msg = { from: this.tabId, type, payload, at: Date.now() };
+    try { if (this.bc) this.bc.postMessage(msg); } catch {}
+    try { localStorage.setItem('auth:bc', JSON.stringify(msg)); } catch {}
+    this.multiRecord(msg);
+  }
+
+  private multiHandle(msg: any) {
+    if (!msg || !this.multitabEnabled) return;
+    const { from, type, payload } = msg;
+    // Ignore self
+    if (from === this.tabId) return;
+    this.multiLastEvent = { type, from, payload, at: new Date() };
+    this.multiRecord(msg);
+    if (type === 'logout') {
+      try { this.provider.logout(); } catch {}
+    }
+    if (type === 'refresh' && payload && payload.access) {
+      const access: string = payload.access;
+      try {
+        const tKey = tokenKey(this.realm, this.clientId);
+        sessionStorage.setItem(tKey, access);
+      } catch {}
+      // Update interceptor source and local state
+      try { this.authTokenSvc.setToken(access); } catch {}
+      try {
+        const parts = decodeJwtParts(access);
+        this.accessToken = access;
+        this.accessTokenExp = (typeof parts.payload?.exp === 'number') ? parts.payload.exp : null;
+        this.tokenPayload = parts.payload || null;
+        this.loggedIn = !!access;
+        this.error = '';
+        this.updateBasicsDerived();
+        this.refreshInterceptorDebug();
+      } catch {}
+    }
+    // Future: handle 'refresh' coordination here
+  }
+
+  private multiRecord(msg: any) {
+    try {
+      this.multiLog.unshift({ at: new Date(), from: msg?.from, type: msg?.type, payload: msg?.payload });
+      if (this.multiLog.length > 10) this.multiLog.pop();
+    } catch {}
   }
 }
